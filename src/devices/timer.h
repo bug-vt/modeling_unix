@@ -3,10 +3,31 @@
 
 #include <round.h>
 #include <stdint.h>
+#include <stdbool.h>
+#include <list.h>
 
 /* Number of timer interrupts per second. */
 #define TIMER_FREQ 1000
 #define NSEC_PER_SEC 1000000000
+
+/* Struct for handling timer sleeping OUR CODE*/
+struct waiting_thread
+{
+   // The tick this thread is waiting for
+   int64_t when;
+   
+   // Pointer to the thread for waking up on the correct tick
+   struct thread * to_wake;
+
+   // List element for linking inside the double list
+   struct list_elem elem;
+};
+
+/* Comparision function used by the list functions to order the waiting thread list OUR CODE*/
+bool timer_sleep_lessThan (const struct list_elem * a, const struct list_elem * b, void * aux);
+
+/* Function for awakening all threads waiting for current tick OUR CODE*/
+void awaken_sleeping_threads (void);
 
 void timer_init (void);
 void timer_calibrate (void);

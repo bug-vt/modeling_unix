@@ -28,6 +28,12 @@ static unsigned loops_per_tick;
 /* The current time wall clock time in nanoseconds */
 static uint64_t cur_time = 0;
 
+/* Sleeping thread list OUR CODE */
+static struct list waiting_threads;
+
+/* Spin lock for accessing the waiting threads */
+static struct spinlock waiting_threads_lock;
+
 static intr_handler_func timer_interrupt;
 static bool too_many_loops (unsigned loops);
 static void busy_wait (int64_t loops);
@@ -40,6 +46,8 @@ void
 timer_init (void) 
 {
   intr_register_ext (0x20 + IRQ_TIMER, timer_interrupt, "8254 Timer");
+  spinlock_init(&waiting_threads_lock);
+  list_init(&waiting_threads);
 }
 
 /* Calibrates loops_per_tick, used to implement brief delays. */
@@ -85,6 +93,12 @@ timer_elapsed (int64_t then)
   return timer_ticks () - then;
 }
 
+/* Comparision for list entries, returns true if time a comes before time b */
+bool
+timer_sleep_lessThan(const struct list_elem* a, const struct list_elem* b, __attribute__((unused)) void * aux) {
+  return list_entry(a, struct waiting_thread, elem)->when < list_entry(b, struct waiting_thread, elem)->when;
+}	
+
 /* Sleeps for approximately TICKS timer ticks.  Interrupts must
    be turned on. */
 void
@@ -92,9 +106,21 @@ timer_sleep (int64_t ticks)
 {
   ASSERT (intr_get_level () == INTR_ON);
   
+  /*
   int64_t start = timer_ticks ();
   while (timer_elapsed (start) < ticks) 
     thread_yield ();
+  */
+
+  struct waiting_thread this_wait;
+  this_wait.to_wake = thread_current ();
+  this_wait.when = ticks + timer_ticks ();
+  spinlock_acquire(&waiting_threads_lock);
+  list_insert_ordered(&waiting_threads, &this_wait.elem, timer_sleep_lessThan, NULL); 
+  //spinlock_release(&waiting_threads_lock);
+  thread_block (&waiting_threads_lock);
+  spinlock_release(&waiting_threads_lock);
+  
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -167,6 +193,37 @@ timer_print_stats (void)
   printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
 }
 
+/* Unblocks all threads that were waiting for this tick */
+void
+awaken_sleeping_threads ()
+{
+    spinlock_acquire(&waiting_threads_lock);
+    struct list_elem *e;
+
+    struct waiting_thread * curr_waiter;
+
+    for (e = list_begin(&waiting_threads); e != list_end (&waiting_threads);)
+    {
+       curr_waiter = list_entry (e, struct waiting_thread, elem);
+
+       if (curr_waiter->when > ticks)
+       {
+          break;
+       }
+       else if (curr_waiter->when < ticks)
+       {
+          thread_unblock(curr_waiter->to_wake);
+          e = list_remove(e);
+       }
+       else
+       {
+          e = list_next(e);
+       }
+
+    }
+    spinlock_release(&waiting_threads_lock);
+}
+
 /* Timer interrupt handler. */
 static void
 timer_interrupt (struct intr_frame *args UNUSED)
@@ -175,6 +232,9 @@ timer_interrupt (struct intr_frame *args UNUSED)
   if (get_cpu ()->id == 0) 
     {
       ticks++;
+      
+      awaken_sleeping_threads ();
+
       timer_settime (timer_ticks () * NSEC_PER_SEC / TIMER_FREQ);
     }
     
