@@ -105,9 +105,30 @@ struct list
    name of the outer structure STRUCT and the member name MEMBER
    of the list element.  See the big comment at the top of the
    file for an example. */
-#define list_entry(LIST_ELEM, STRUCT, MEMBER)           \
-        ((STRUCT *) ((uint8_t *) &(LIST_ELEM)->next     \
+
+#define list_entry(LIST_ELEM, STRUCT, MEMBER)                      \
+        ((STRUCT *) ((uint8_t *) &(LIST_ELEM)->next                \
                      - offsetof (STRUCT, MEMBER.next)))
+
+#define list_next_entry(pos, member)                               \
+        list_entry((pos)->member.next, typeof(*(pos)), member)
+
+#define list_first_entry(ptr, type, member)                        \
+        list_entry((ptr)->next, type, member)
+
+#define list_next_exists(pos, member)                              \
+        (pos)->member.next != NULL
+
+#define list_for_each_entry(pos, head, member)                     \
+        for (pos = list_first_entry(head, typeof(*(pos)), member); \
+             list_next_exists(pos, member);                        \
+             pos = list_next_entry(pos, member))             
+
+#define list_for_each_entry_safe(pos, n, head, member)             \
+    for (pos = list_first_entry(head, typeof(*pos), member),       \
+        n = list_next_entry(pos, member);                          \
+         list_next_exists(pos, member);                            \
+         pos = n, n = list_next_entry(n, member))
 
 /* List initialization.
 

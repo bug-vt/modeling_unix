@@ -198,14 +198,10 @@ void
 awaken_sleeping_threads ()
 {
     spinlock_acquire(&waiting_threads_lock);
-    struct list_elem *e;
 
     struct waiting_thread * curr_waiter;
-
-    for (e = list_begin(&waiting_threads); e != list_end (&waiting_threads);)
-    {
-       curr_waiter = list_entry (e, struct waiting_thread, elem);
-
+    struct waiting_thread * t;
+    list_for_each_entry_safe(curr_waiter, t, &waiting_threads.head, elem) {
        if (curr_waiter->when > ticks)
        {
           break;
@@ -213,14 +209,10 @@ awaken_sleeping_threads ()
        else if (curr_waiter->when < ticks)
        {
           thread_unblock(curr_waiter->to_wake);
-          e = list_remove(e);
+          list_remove(&curr_waiter->elem);
        }
-       else
-       {
-          e = list_next(e);
-       }
-
     }
+
     spinlock_release(&waiting_threads_lock);
 }
 
