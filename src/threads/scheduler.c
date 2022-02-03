@@ -74,19 +74,19 @@ sched_unblock (struct ready_queue *rq_to_add, struct thread *t, int initial UNUS
   list_push_back (&rq_to_add->ready_list, &t->elem);
   rq_to_add->nr_ready++;
 
-  t->timer_stop = timer_gettime ();
+  // t->timer_stop = timer_gettime ();
 
-  uint64_t vruntime_0 = !t->times_used ?
-    rq_to_add->min_vruntime :
-    max(t->vruntime, rq_to_add->min_vruntime - 20000000);
+  // uint64_t vruntime_0 = !t->times_used ?
+  //   rq_to_add->min_vruntime :
+  //   max(t->vruntime, rq_to_add->min_vruntime - 20000000);
 
-  uint64_t d = t->timer_stop - t->timer_start;
-  t->vruntime = vruntime_0 + d * prio_to_weight[NICE_DEFAULT] / prio_to_weight[t->nice];
+  // uint64_t d = t->timer_stop - t->timer_start;
+  // t->vruntime = vruntime_0 + d * prio_to_weight[NICE_DEFAULT] / prio_to_weight[t->nice];
 
-  find_min_vruntime (rq_to_add, t);
+  // find_min_vruntime (rq_to_add, t);
 
   /* CPU is idle */
-  if (!rq_to_add->curr)
+  if (!rq_to_add->curr || initial == 0)
     {
       return RETURN_YIELD;
     }
