@@ -435,10 +435,11 @@ thread_exit_ap (void)
 void
 thread_foreach (thread_action_func *func, void *aux)
 {
+  struct list_elem *e;
   spinlock_acquire (&all_lock);
-  struct thread * t;
-  list_for_each_entry(t, &all_list.head, elem)
+  for (e = list_begin (&all_list); e != list_end (&all_list); e = list_next (e))
     {
+      struct thread *t = list_entry(e, struct thread, allelem);
       func (t, aux);
     }
   spinlock_release (&all_lock);

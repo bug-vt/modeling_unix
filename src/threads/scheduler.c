@@ -13,7 +13,7 @@ static inline int64_t max (int64_t x, int64_t y) {
     return x > y ? x : y;
 }
 static inline int64_t min (int64_t x, int64_t y) {
-    return x > y ? x : y;
+    return x < y ? x : y;
 }
 static void find_min_vruntime (struct ready_queue *);
 static int32_t queue_total_weight (struct ready_queue *);
@@ -137,8 +137,8 @@ sched_tick (struct ready_queue *curr_rq, struct thread *current UNUSED)
     max(current->vruntime, curr_rq->min_vruntime - 20000000);
 
   current->vruntime = !current->cpu_consumed ?
-    vruntime_0 + current->cpu_consumed ++ * prio_to_weight[NICE_DEFAULT] / prio_to_weight[current->nice] :
-    current->vruntime + current->cpu_consumed ++ * prio_to_weight[NICE_DEFAULT] / prio_to_weight[current->nice];
+    vruntime_0 + ++ current->cpu_consumed * prio_to_weight[NICE_DEFAULT] / prio_to_weight[current->nice] :
+    current->vruntime + ++ current->cpu_consumed * prio_to_weight[NICE_DEFAULT] / prio_to_weight[current->nice];
 
   find_min_vruntime (curr_rq);
   int ready_or_running = curr_rq->curr != NULL ? curr_rq->nr_ready + 1 : curr_rq->nr_ready;
