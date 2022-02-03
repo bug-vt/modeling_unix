@@ -15,7 +15,7 @@ static inline int64_t max (int64_t x, int64_t y) {
 static inline int64_t min (int64_t x, int64_t y) {
     return x < y ? x : y;
 }
-static void find_min_vruntime (struct ready_queue *);
+static void find_min_vruntime (struct ready_queue *, struct thread *);
 static int32_t queue_total_weight (struct ready_queue *);
 static struct thread *find_thread (struct ready_queue *);
 
@@ -95,7 +95,7 @@ sched_yield (struct ready_queue *curr_rq, struct thread *current)
   curr_rq->nr_ready ++;
   /* Cleans up CFS calculations */
   current->cpu_consumed = 0;
-  //current->times_used ++;
+  current->times_used ++;
 }
 
 /* Called from next_thread_to_run ().
@@ -140,7 +140,7 @@ sched_tick (struct ready_queue *curr_rq, struct thread *current UNUSED)
     vruntime_0 + ++ current->cpu_consumed * prio_to_weight[NICE_DEFAULT] / prio_to_weight[current->nice] :
     current->vruntime + ++ current->cpu_consumed * prio_to_weight[NICE_DEFAULT] / prio_to_weight[current->nice];
 
-  find_min_vruntime (curr_rq);
+  find_min_vruntime (curr_rq, current);
   int ready_or_running = curr_rq->curr != NULL ? curr_rq->nr_ready + 1 : curr_rq->nr_ready;
   //printf("current thread: %s, vruntime: %lld, min_vruntime: %lld,", current->name, current->vruntime, curr_rq->min_vruntime);
   //printf(" times used: %d, cpu consumed: %lld,", current->times_used, current->cpu_consumed);
@@ -175,13 +175,13 @@ sched_block (struct ready_queue *rq UNUSED, struct thread *current UNUSED)
 
 /* Function that finds the min_vruntime value and sets it up */
 static void
-find_min_vruntime (struct ready_queue *rq)
+find_min_vruntime (struct ready_queue *rq, struct thread * curr)
 {
-  int64_t min_vruntime = 0;
+  int64_t min_vruntime = curr->vruntime;
 
   if (rq->curr != NULL)
     {
-      min_vruntime = rq->curr->vruntime;
+      min_vruntime = min(rq->curr->vruntime, min_vruntime);
     }
 
   struct thread * t;
@@ -225,7 +225,7 @@ find_thread (struct ready_queue * rq)
   list_for_each_entry(t, &rq->ready_list.head, elem) 
     {
       if (t->vruntime < t_front->vruntime ||
-         (t->vruntime == t_front->vruntime && t->tid < t_front->tid)) 
+         (t->vruntime == t_front->vruntime && t->tid < t_front->tid/* && t->times_used < t_front->times_used*/)) 
         {
           t_front = t;
         }
