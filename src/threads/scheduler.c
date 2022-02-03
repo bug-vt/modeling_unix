@@ -161,7 +161,8 @@ sched_tick (struct ready_queue *curr_rq, struct thread *current UNUSED)
 
   // find_min_vruntime (curr_rq, current);
   int ready_or_running = curr_rq->curr != NULL ? curr_rq->nr_ready + 1 : curr_rq->nr_ready;
-  uint64_t ideal_runtime = TIME_SLICE * ready_or_running * prio_to_weight[current->nice] / queue_total_weight (curr_rq);
+  uint64_t ideal_runtime = (TIME_SLICE * ready_or_running * prio_to_weight[current->nice] / queue_total_weight (curr_rq)) * 1000000;
+  curr_rq->thread_ticks += timer_gettime () - curr_rq->thread_ticks;
   //printf("current thread: %s, vruntime: %lld, min_vruntime: %lld,", current->name, current->vruntime, curr_rq->min_vruntime);
   //printf(" times used: %d, cpu consumed: %lld,", current->times_used, current->cpu_consumed);
   //printf(" runtime: %d\n", TIME_SLICE * ready_or_running * prio_to_weight[current->nice] / queue_total_weight (curr_rq));
@@ -169,7 +170,7 @@ sched_tick (struct ready_queue *curr_rq, struct thread *current UNUSED)
   //   printf("divide by 0, %lld\n", curr_rq->min_vruntime);
   // }
   /* Enforce preemption. */
-  if (++curr_rq->thread_ticks >= ideal_runtime)
+  if (curr_rq->thread_ticks >= ideal_runtime)
     {
       /* Start a new time slice. */
       curr_rq->thread_ticks = 0;
