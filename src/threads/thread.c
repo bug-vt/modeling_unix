@@ -573,7 +573,8 @@ init_thread (struct thread *t, const char *name, int nice)
   t->nice = nice;
   t->magic = THREAD_MAGIC;
   t->vruntime = 0;
-  t->cpu_consumed = 0;
+  t->timer_start = 0;
+  t->timer_stop = 0;
   t->times_used = 0;
   if (cpu_can_acquire_spinlock)
     spinlock_acquire (&all_lock);

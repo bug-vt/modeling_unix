@@ -40,7 +40,7 @@ struct ready_queue
                                  Allows O(1) access. */
 
   /* OUR CODE */ //----------------------------------NEW
-  int64_t min_vruntime;
+  uint64_t min_vruntime;
 };
 
 void sched_init (struct ready_queue *);
