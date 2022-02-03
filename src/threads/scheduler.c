@@ -12,6 +12,9 @@
 static inline int64_t max (int64_t x, int64_t y) {
     return x > y ? x : y;
 }
+static inline int64_t min (int64_t x, int64_t y) {
+    return x > y ? x : y;
+}
 static void find_min_vruntime (struct ready_queue *);
 static int32_t queue_total_weight (struct ready_queue *);
 static struct thread *find_thread (struct ready_queue *);
@@ -110,7 +113,6 @@ sched_pick_next (struct ready_queue *curr_rq)
   if (list_empty (&curr_rq->ready_list))
     return NULL;
 
-  //struct thread *ret = list_entry(list_pop_front (&curr_rq->ready_list), struct thread, elem);
   struct thread *ret = find_thread(curr_rq);
   list_remove(&ret->elem);
   curr_rq->nr_ready--;
@@ -169,8 +171,6 @@ sched_block (struct ready_queue *rq UNUSED, struct thread *current UNUSED)
 {
   /* Cleans up CFS calculations */
   current->cpu_consumed = 0;
-  //current->times_used ++;
-  ;
 }
 
 /* Function that finds the min_vruntime value and sets it up */
@@ -184,13 +184,10 @@ find_min_vruntime (struct ready_queue *rq)
       min_vruntime = rq->curr->vruntime;
     }
 
-  for (struct list_elem * e = list_begin (&rq->ready_list); e != list_end (&rq->ready_list); e = list_next (e))
+  struct thread * t;
+  list_for_each_entry(t, &rq->ready_list.head, elem)  
     {
-      struct thread * t = list_entry (e, struct thread, elem);
-      if (t->vruntime < min_vruntime)
-        {
-          min_vruntime = t->vruntime;
-        }
+      min_vruntime = min(t->vruntime, min_vruntime);
     }
 
   rq->min_vruntime = min_vruntime;
@@ -206,33 +203,32 @@ queue_total_weight (struct ready_queue *rq)
     {
       total_weight += prio_to_weight[rq->curr->nice];
     }
-
-  for (struct list_elem * e = list_begin (&rq->ready_list); e != list_end (&rq->ready_list); e = list_next (e))
+  struct thread * t;
+  list_for_each_entry(t, &rq->ready_list.head, elem) 
     {
-      struct thread * t = list_entry (e, struct thread, elem);
       total_weight += prio_to_weight[t->nice];
     }
 
   return total_weight == 0 ? 1 : total_weight;
 }
 
-/*  */
+
 static struct thread *
 find_thread (struct ready_queue * rq)
 {
-  struct thread * th = list_entry(list_front (&rq->ready_list), struct thread, elem);
-  for (struct list_elem * e = list_begin (&rq->ready_list); e != list_end (&rq->ready_list); e = list_next (e))
+  struct thread * t_front = list_entry(
+                                list_front (&rq->ready_list), 
+                                struct thread, 
+                                elem
+                            );
+  struct thread * t;
+  list_for_each_entry(t, &rq->ready_list.head, elem) 
     {
-      struct thread * t = list_entry (e, struct thread, elem);
-      //printf("%s\n", t->name);
-      if (t->vruntime < th->vruntime)
+      if (t->vruntime < t_front->vruntime ||
+         (t->vruntime == t_front->vruntime && t->tid < t_front->tid)) 
         {
-          th = t;
-        }
-      else if (t->vruntime == th->vruntime && t->tid < th->tid)
-        {
-          th = t;
+          t_front = t;
         }
     }
-  return th;
+  return t_front;
 }
