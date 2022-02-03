@@ -38,6 +38,9 @@ struct ready_queue
   struct list ready_list;     /* List of ready threads. */
   unsigned long nr_ready;     /* number of elements in ready_list.
                                  Allows O(1) access. */
+
+  /* OUR CODE */ //----------------------------------NEW
+  int64_t min_vruntime;
 };
 
 void sched_init (struct ready_queue *);

@@ -4,9 +4,30 @@
 #include "list.h"
 #include "threads/spinlock.h"
 #include <debug.h>
-
+#include <stdio.h> // debugging
 /* Scheduling. */
 #define TIME_SLICE 4            /* # of timer ticks to give each thread. */
+
+/* Functions for Virtual Runtime calculations */
+static inline int64_t max (int64_t x, int64_t y) {
+    return x > y ? x : y;
+}
+static void find_min_vruntime (struct ready_queue *);
+static int32_t queue_total_weight (struct ready_queue *);
+static struct thread *find_thread (struct ready_queue *);
+
+/* Table used to map a nice value to weight */
+static const uint32_t prio_to_weight[40] =
+  {
+    /* -20 */    88761, 71755, 56483, 46273, 36291,
+    /* -15 */    29154, 23254, 18705, 14949, 11916,
+    /* -10 */    9548, 7620, 6100, 4904, 3906,
+    /*  -5 */    3121, 2501, 1991, 1586, 1277,
+    /*   0 */    1024, 820, 655, 526, 423,
+    /*   5 */    335, 272, 215, 172, 137,
+    /*  10 */    110, 87, 70, 56, 45,
+    /*  15 */    36, 29, 23, 18, 15,
+  };
 
 /*
  * In the provided baseline implementation, threads are kept in an unsorted list.
@@ -29,6 +50,7 @@ void
 sched_init (struct ready_queue *curr_rq)
 {
   list_init (&curr_rq->ready_list);
+  curr_rq->min_vruntime = 0;
 }
 
 /* Called from thread.c:wake_up_new_thread () and
@@ -47,6 +69,8 @@ sched_unblock (struct ready_queue *rq_to_add, struct thread *t, int initial UNUS
 {
   list_push_back (&rq_to_add->ready_list, &t->elem);
   rq_to_add->nr_ready++;
+  t->cpu_consumed = 0;
+  //t->times_used ++;
 
   /* CPU is idle */
   if (!rq_to_add->curr)
@@ -66,6 +90,9 @@ sched_yield (struct ready_queue *curr_rq, struct thread *current)
 {
   list_push_back (&curr_rq->ready_list, &current->elem);
   curr_rq->nr_ready ++;
+  /* Cleans up CFS calculations */
+  current->cpu_consumed = 0;
+  //current->times_used ++;
 }
 
 /* Called from next_thread_to_run ().
@@ -83,7 +110,9 @@ sched_pick_next (struct ready_queue *curr_rq)
   if (list_empty (&curr_rq->ready_list))
     return NULL;
 
-  struct thread *ret = list_entry(list_pop_front (&curr_rq->ready_list), struct thread, elem);
+  //struct thread *ret = list_entry(list_pop_front (&curr_rq->ready_list), struct thread, elem);
+  struct thread *ret = find_thread(curr_rq);
+  list_remove(&ret->elem);
   curr_rq->nr_ready--;
   return ret;
 }
@@ -100,12 +129,31 @@ sched_pick_next (struct ready_queue *curr_rq)
 enum sched_return_action
 sched_tick (struct ready_queue *curr_rq, struct thread *current UNUSED)
 {
+  /* Do processes/calculations for CFS */
+  int64_t vruntime_0 = !current->times_used ?
+    curr_rq->min_vruntime :
+    max(current->vruntime, curr_rq->min_vruntime - 20000000);
+
+  current->vruntime = !current->cpu_consumed ?
+    vruntime_0 + current->cpu_consumed ++ * prio_to_weight[NICE_DEFAULT] / prio_to_weight[current->nice] :
+    current->vruntime + current->cpu_consumed ++ * prio_to_weight[NICE_DEFAULT] / prio_to_weight[current->nice];
+
+  find_min_vruntime (curr_rq);
+  int ready_or_running = curr_rq->curr != NULL ? curr_rq->nr_ready + 1 : curr_rq->nr_ready;
+  //printf("current thread: %s, vruntime: %lld, min_vruntime: %lld,", current->name, current->vruntime, curr_rq->min_vruntime);
+  //printf(" times used: %d, cpu consumed: %lld,", current->times_used, current->cpu_consumed);
+  //printf(" runtime: %d\n", TIME_SLICE * ready_or_running * prio_to_weight[current->nice] / queue_total_weight (curr_rq));
+  // if (queue_total_weight (curr_rq) == 0) {
+  //   printf("divide by 0, %lld\n", curr_rq->min_vruntime);
+  // }
   /* Enforce preemption. */
-  if (++curr_rq->thread_ticks >= TIME_SLICE)
+  if (++curr_rq->thread_ticks >= TIME_SLICE * ready_or_running * prio_to_weight[current->nice] / queue_total_weight (curr_rq))
     {
+      /* Cleans up CFS calculations */
+      current->cpu_consumed = 0;
+      current->times_used ++;
       /* Start a new time slice. */
       curr_rq->thread_ticks = 0;
-
       return RETURN_YIELD;
     }
   return RETURN_NONE;
@@ -119,5 +167,72 @@ sched_tick (struct ready_queue *curr_rq, struct thread *current UNUSED)
 void
 sched_block (struct ready_queue *rq UNUSED, struct thread *current UNUSED)
 {
+  /* Cleans up CFS calculations */
+  current->cpu_consumed = 0;
+  //current->times_used ++;
   ;
+}
+
+/* Function that finds the min_vruntime value and sets it up */
+static void
+find_min_vruntime (struct ready_queue *rq)
+{
+  int64_t min_vruntime = 0;
+
+  if (rq->curr != NULL)
+    {
+      min_vruntime = rq->curr->vruntime;
+    }
+
+  for (struct list_elem * e = list_begin (&rq->ready_list); e != list_end (&rq->ready_list); e = list_next (e))
+    {
+      struct thread * t = list_entry (e, struct thread, elem);
+      if (t->vruntime < min_vruntime)
+        {
+          min_vruntime = t->vruntime;
+        }
+    }
+
+  rq->min_vruntime = min_vruntime;
+}
+
+/*  */
+static int32_t
+queue_total_weight (struct ready_queue *rq)
+{
+  int32_t total_weight = 0;
+
+  if (rq->curr != NULL)
+    {
+      total_weight += prio_to_weight[rq->curr->nice];
+    }
+
+  for (struct list_elem * e = list_begin (&rq->ready_list); e != list_end (&rq->ready_list); e = list_next (e))
+    {
+      struct thread * t = list_entry (e, struct thread, elem);
+      total_weight += prio_to_weight[t->nice];
+    }
+
+  return total_weight == 0 ? 1 : total_weight;
+}
+
+/*  */
+static struct thread *
+find_thread (struct ready_queue * rq)
+{
+  struct thread * th = list_entry(list_front (&rq->ready_list), struct thread, elem);
+  for (struct list_elem * e = list_begin (&rq->ready_list); e != list_end (&rq->ready_list); e = list_next (e))
+    {
+      struct thread * t = list_entry (e, struct thread, elem);
+      //printf("%s\n", t->name);
+      if (t->vruntime < th->vruntime)
+        {
+          th = t;
+        }
+      else if (t->vruntime == th->vruntime && t->tid < th->tid)
+        {
+          th = t;
+        }
+    }
+  return th;
 }
