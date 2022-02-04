@@ -111,10 +111,10 @@ struct thread
 
   /* OUR CODE */ //-----------------------------------------NEW
   /* Used for CFS in scheduler.c */
-  uint64_t vruntime; /* Virtual Runtime */
+  int64_t vruntime; /* Virtual Runtime */
   /* CPU consumption */
-  uint64_t timer_start;
-  uint64_t timer_stop;
+  int64_t timer_start;
+  int64_t timer_stop;
   int16_t times_used; /* Times thread has been executed */
 };
 
