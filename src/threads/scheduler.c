@@ -16,7 +16,7 @@ static inline int64_t max (int64_t x, int64_t y) {
 static inline int64_t min (int64_t x, int64_t y) {
     return x < y ? x : y;
 }
-static void find_min_vruntime (struct ready_queue *, struct thread *);
+static void set_min_vruntime (struct ready_queue *);
 static int32_t queue_total_weight (struct ready_queue *);
 static struct thread *find_thread (struct ready_queue *);
 
@@ -77,7 +77,7 @@ sched_unblock (struct ready_queue *rq_to_add, struct thread *t, int initial UNUS
       int64_t d = rq_to_add->curr->timer_stop - rq_to_add->curr->timer_start;
       rq_to_add->curr->vruntime += d * prio_to_weight[NICE_DEFAULT] / prio_to_weight[rq_to_add->curr->nice];
       rq_to_add->curr->timer_start = timer_gettime ();
-      find_min_vruntime (rq_to_add, rq_to_add->curr);
+      set_min_vruntime (rq_to_add);
       d = t->timer_stop - t->timer_start;
       t->vruntime += d * prio_to_weight[NICE_DEFAULT] / prio_to_weight[t->nice];
       t->vruntime = max(t->vruntime, rq_to_add->min_vruntime - 20000000);
@@ -90,7 +90,6 @@ sched_unblock (struct ready_queue *rq_to_add, struct thread *t, int initial UNUS
 
   list_push_back (&rq_to_add->ready_list, &t->elem);
   rq_to_add->nr_ready++;
-
 
   /* CPU is idle */
   if (!rq_to_add->curr || initial == 0)
@@ -110,14 +109,15 @@ sched_yield (struct ready_queue *curr_rq, struct thread *current)
 {
   list_push_back (&curr_rq->ready_list, &current->elem);
   curr_rq->nr_ready ++;
-
   current->timer_stop = timer_gettime ();
 
   int64_t d = current->timer_stop - current->timer_start;
   current->vruntime += d * prio_to_weight[NICE_DEFAULT] / prio_to_weight[current->nice];
 
   // find_min_vruntime (curr_rq, current);
+
 }
+
 
 /* Called from next_thread_to_run ().
    Find the next thread to run and remove it from the ready list
@@ -134,8 +134,8 @@ sched_pick_next (struct ready_queue *curr_rq)
   if (list_empty (&curr_rq->ready_list))
     return NULL;
 
-  struct thread *ret = find_thread(curr_rq);
-  list_remove(&ret->elem);
+  struct thread *ret = find_thread (curr_rq);
+  list_remove (&ret->elem);
   ret->timer_start = timer_gettime ();
   curr_rq->nr_ready--;
   return ret;
@@ -179,19 +179,19 @@ sched_block (struct ready_queue *rq UNUSED, struct thread *current UNUSED)
 
 /* Function that finds the min_vruntime value and sets it up */
 static void
-find_min_vruntime (struct ready_queue *rq, struct thread * curr)
+set_min_vruntime (struct ready_queue *rq)
 {
-  int64_t min_vruntime = curr->vruntime;
+  int64_t min_vruntime = (int64_t)1  << 62;
 
   if (rq->curr != NULL)
     {
-      min_vruntime = min(rq->curr->vruntime, min_vruntime);
+      min_vruntime = min (rq->curr->vruntime, min_vruntime);
     }
 
   struct thread * t;
   list_for_each_entry(t, &rq->ready_list.head, elem)  
     {
-      min_vruntime = min(t->vruntime, min_vruntime);
+      min_vruntime = min (t->vruntime, min_vruntime);
     }
 
   rq->min_vruntime = min_vruntime;
@@ -229,7 +229,7 @@ find_thread (struct ready_queue * rq)
   list_for_each_entry(t, &rq->ready_list.head, elem) 
     {
       if (t->vruntime < t_front->vruntime ||
-         (t->vruntime == t_front->vruntime && t->tid < t_front->tid/* && t->times_used < t_front->times_used*/)) 
+         (t->vruntime == t_front->vruntime && t->tid < t_front->tid)) 
         {
           t_front = t;
         }
