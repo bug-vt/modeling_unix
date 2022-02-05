@@ -71,19 +71,26 @@ sched_init (struct ready_queue *curr_rq)
 enum sched_return_action
 sched_unblock (struct ready_queue *rq_to_add, struct thread *t, int initial UNUSED)
 {
+  if (!initial && rq_to_add->curr != NULL)
+    {
+      rq_to_add->curr->timer_stop = timer_gettime ();
+      int64_t d = rq_to_add->curr->timer_stop - rq_to_add->curr->timer_start;
+      rq_to_add->curr->vruntime += d * prio_to_weight[NICE_DEFAULT] / prio_to_weight[rq_to_add->curr->nice];
+      rq_to_add->curr->timer_start = timer_gettime ();
+      find_min_vruntime (rq_to_add, rq_to_add->curr);
+      d = t->timer_stop - t->timer_start;
+      t->vruntime += d * prio_to_weight[NICE_DEFAULT] / prio_to_weight[t->nice];
+      t->vruntime = max(t->vruntime, rq_to_add->min_vruntime - 20000000);
+    }
+  else if (initial && rq_to_add->curr != NULL)
+    {
+      // find_min_vruntime (rq_to_add, rq_to_add->curr);
+      t->vruntime = rq_to_add->min_vruntime ? rq_to_add->min_vruntime : rq_to_add->curr->vruntime;
+    }
+
   list_push_back (&rq_to_add->ready_list, &t->elem);
   rq_to_add->nr_ready++;
 
-  // t->timer_stop = timer_gettime ();
-
-  int64_t vruntime_0 = !t->times_used ?
-    rq_to_add->min_vruntime :
-    max(t->vruntime, rq_to_add->min_vruntime - 20000000);
-
-  int64_t d = t->timer_stop - t->timer_start;
-  t->vruntime = vruntime_0 + d * prio_to_weight[NICE_DEFAULT] / prio_to_weight[t->nice];
-
-  find_min_vruntime (rq_to_add, t);
 
   /* CPU is idle */
   if (!rq_to_add->curr || initial == 0)
@@ -106,16 +113,10 @@ sched_yield (struct ready_queue *curr_rq, struct thread *current)
 
   current->timer_stop = timer_gettime ();
 
-  current->times_used ++;
-
-  int64_t vruntime_0 = !current->times_used ?
-    curr_rq->min_vruntime :
-    max(current->vruntime, curr_rq->min_vruntime - 20000000);
-
   int64_t d = current->timer_stop - current->timer_start;
-  current->vruntime = vruntime_0 + d * prio_to_weight[NICE_DEFAULT] / prio_to_weight[current->nice];
+  current->vruntime += d * prio_to_weight[NICE_DEFAULT] / prio_to_weight[current->nice];
 
-  find_min_vruntime (curr_rq, current);
+  // find_min_vruntime (curr_rq, current);
 }
 
 /* Called from next_thread_to_run ().
@@ -152,25 +153,9 @@ sched_pick_next (struct ready_queue *curr_rq)
 enum sched_return_action
 sched_tick (struct ready_queue *curr_rq, struct thread *current UNUSED)
 {
-  /* Do processes/calculations for CFS */
-  // int64_t vruntime_0 = !current->times_used ?
-  //   curr_rq->min_vruntime :
-  //   max(current->vruntime, curr_rq->min_vruntime - 20000000);
-
-  // current->vruntime = !current->cpu_consumed ?
-  //   vruntime_0 + ++ current->cpu_consumed * prio_to_weight[NICE_DEFAULT] / prio_to_weight[current->nice] :
-  //   current->vruntime + ++ current->cpu_consumed * prio_to_weight[NICE_DEFAULT] / prio_to_weight[current->nice];
-
-  // find_min_vruntime (curr_rq, current);
   int ready_or_running = curr_rq->curr != NULL ? curr_rq->nr_ready + 1 : curr_rq->nr_ready;
   int64_t ideal_runtime = (TIME_SLICE * ready_or_running * prio_to_weight[current->nice] / queue_total_weight (curr_rq)) * 1000000;
   curr_rq->thread_ticks += timer_gettime () - curr_rq->thread_ticks;
-  //printf("current thread: %s, vruntime: %lld, min_vruntime: %lld,", current->name, current->vruntime, curr_rq->min_vruntime);
-  //printf(" times used: %d, cpu consumed: %lld,", current->times_used, current->cpu_consumed);
-  //printf(" runtime: %d\n", TIME_SLICE * ready_or_running * prio_to_weight[current->nice] / queue_total_weight (curr_rq));
-  // if (queue_total_weight (curr_rq) == 0) {
-  //   printf("divide by 0, %lld\n", curr_rq->min_vruntime);
-  // }
   /* Enforce preemption. */
   if (curr_rq->thread_ticks >= ideal_runtime)
     {
@@ -190,17 +175,6 @@ void
 sched_block (struct ready_queue *rq UNUSED, struct thread *current UNUSED)
 {
   current->timer_stop = timer_gettime ();
-
-  current->times_used ++;
-
-  // int64_t vruntime_0 = !current->times_used ?
-  //   rq->min_vruntime :
-  //   max(current->vruntime, rq->min_vruntime - 20000000);
-
-  // int64_t d = current->timer_stop - current->timer_start;
-  // current->vruntime = vruntime_0 + d * prio_to_weight[NICE_DEFAULT] / prio_to_weight[current->nice];
-
-  // find_min_vruntime (rq, current);
 }
 
 /* Function that finds the min_vruntime value and sets it up */

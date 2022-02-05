@@ -115,7 +115,6 @@ struct thread
   /* CPU consumption */
   int64_t timer_start;
   int64_t timer_stop;
-  int16_t times_used; /* Times thread has been executed */
 };
 
 void thread_init (void);

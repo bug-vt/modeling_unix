@@ -575,7 +575,6 @@ init_thread (struct thread *t, const char *name, int nice)
   t->vruntime = 0;
   t->timer_start = 0;
   t->timer_stop = 0;
-  t->times_used = 0;
   if (cpu_can_acquire_spinlock)
     spinlock_acquire (&all_lock);
   list_push_back (&all_list, &t->allelem);
