@@ -17,7 +17,7 @@ static inline int64_t min (int64_t x, int64_t y) {
     return x < y && x != 0 ? x : y;
 }
 static void set_min_vruntime (struct ready_queue *);
-static int32_t queue_total_weight (struct ready_queue *);
+static int64_t queue_total_weight (struct ready_queue *);
 static struct thread *find_thread (struct ready_queue *);
 
 /* Table used to map a nice value to weight */
@@ -75,7 +75,7 @@ sched_unblock (struct ready_queue *rq_to_add, struct thread *t, int initial UNUS
     {
       rq_to_add->curr->timer_stop = timer_gettime ();
       int64_t d = rq_to_add->curr->timer_stop - rq_to_add->curr->timer_start;
-      rq_to_add->curr->vruntime += d * prio_to_weight[NICE_DEFAULT] / prio_to_weight[rq_to_add->curr->nice];
+      rq_to_add->curr->vruntime += d * prio_to_weight[NICE_DEFAULT + 20] / prio_to_weight[rq_to_add->curr->nice + 20];
       rq_to_add->curr->timer_start = timer_gettime ();
       set_min_vruntime (rq_to_add);
       d = t->timer_stop - t->timer_start;
@@ -87,7 +87,7 @@ sched_unblock (struct ready_queue *rq_to_add, struct thread *t, int initial UNUS
       // find_min_vruntime (rq_to_add, rq_to_add->curr);
       rq_to_add->curr->timer_stop = timer_gettime ();
       int64_t d = rq_to_add->curr->timer_stop - rq_to_add->curr->timer_start;
-      rq_to_add->curr->vruntime += d * prio_to_weight[NICE_DEFAULT] / prio_to_weight[rq_to_add->curr->nice];
+      rq_to_add->curr->vruntime += d * prio_to_weight[NICE_DEFAULT + 20] / prio_to_weight[rq_to_add->curr->nice + 20];
       rq_to_add->curr->timer_start = timer_gettime ();
       if (d)
         {
@@ -120,7 +120,7 @@ sched_yield (struct ready_queue *curr_rq, struct thread *current)
   current->timer_stop = timer_gettime ();
 
   int64_t d = current->timer_stop - current->timer_start;
-  current->vruntime += d * prio_to_weight[NICE_DEFAULT] / prio_to_weight[current->nice];
+  current->vruntime += d * prio_to_weight[NICE_DEFAULT + 20] / prio_to_weight[current->nice + 20];
 
   // find_min_vruntime (curr_rq, current);
 
@@ -162,7 +162,8 @@ enum sched_return_action
 sched_tick (struct ready_queue *curr_rq, struct thread *current UNUSED)
 {
   int ready_or_running = curr_rq->curr != NULL ? curr_rq->nr_ready + 1 : curr_rq->nr_ready;
-  int64_t ideal_runtime = (TIME_SLICE * ready_or_running * prio_to_weight[current->nice] / queue_total_weight (curr_rq)) * 1000000;
+  int64_t total_weight = queue_total_weight (curr_rq);
+  int64_t ideal_runtime = (4000000 * ready_or_running * prio_to_weight[current->nice + 20]) / total_weight;
   curr_rq->thread_ticks += timer_gettime () - curr_rq->thread_ticks;
   /* Enforce preemption. */
   if (curr_rq->thread_ticks >= ideal_runtime)
@@ -206,19 +207,19 @@ set_min_vruntime (struct ready_queue *rq)
 }
 
 /*  */
-static int32_t
+static int64_t
 queue_total_weight (struct ready_queue *rq)
 {
-  int32_t total_weight = 0;
+  int64_t total_weight = 0;
 
   if (rq->curr != NULL)
     {
-      total_weight += prio_to_weight[rq->curr->nice];
+      total_weight += prio_to_weight[rq->curr->nice + 20];
     }
   struct thread * t;
   list_for_each_entry(t, &rq->ready_list.head, elem) 
     {
-      total_weight += prio_to_weight[t->nice];
+      total_weight += prio_to_weight[t->nice + 20];
     }
 
   return total_weight == 0 ? 1 : total_weight;
