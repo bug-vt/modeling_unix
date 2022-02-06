@@ -14,7 +14,7 @@ static inline int64_t max (int64_t x, int64_t y) {
     return x > y ? x : y;
 }
 static inline int64_t min (int64_t x, int64_t y) {
-    return x < y ? x : y;
+    return x < y && x != 0 ? x : y;
 }
 static void set_min_vruntime (struct ready_queue *);
 static int32_t queue_total_weight (struct ready_queue *);
@@ -85,6 +85,14 @@ sched_unblock (struct ready_queue *rq_to_add, struct thread *t, int initial UNUS
   else if (initial && rq_to_add->curr != NULL)
     {
       // find_min_vruntime (rq_to_add, rq_to_add->curr);
+      rq_to_add->curr->timer_stop = timer_gettime ();
+      int64_t d = rq_to_add->curr->timer_stop - rq_to_add->curr->timer_start;
+      rq_to_add->curr->vruntime += d * prio_to_weight[NICE_DEFAULT] / prio_to_weight[rq_to_add->curr->nice];
+      rq_to_add->curr->timer_start = timer_gettime ();
+      if (d)
+        {
+          set_min_vruntime (rq_to_add);
+        }
       t->vruntime = rq_to_add->min_vruntime ? rq_to_add->min_vruntime : rq_to_add->curr->vruntime;
     }
 
@@ -194,7 +202,7 @@ set_min_vruntime (struct ready_queue *rq)
       min_vruntime = min (t->vruntime, min_vruntime);
     }
 
-  rq->min_vruntime = min_vruntime;
+  rq->min_vruntime = min_vruntime == (int64_t)1  << 62 ? 0 : min_vruntime;
 }
 
 /*  */
