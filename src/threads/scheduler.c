@@ -16,6 +16,9 @@ static inline int64_t max (int64_t x, int64_t y) {
 static inline int64_t min (int64_t x, int64_t y) {
     return x < y && x != 0 ? x : y;
 }
+
+static int64_t calc_ideal_runtime(struct ready_queue *, struct thread *);
+static int64_t calc_vruntime(struct thread * t, int64_t bonus); 
 static void set_min_vruntime (struct ready_queue *);
 static int64_t queue_total_weight (struct ready_queue *);
 static struct thread *find_thread (struct ready_queue *);
@@ -68,32 +71,33 @@ sched_init (struct ready_queue *curr_rq)
    Returns RETURN_YIELD if the CPU containing rq should
    be rescheduled when this function returns, else returns
    RETURN_NONE */
+
+
+
 enum sched_return_action
 sched_unblock (struct ready_queue *rq_to_add, struct thread *t, int initial UNUSED)
 {
   if (!initial && rq_to_add->curr != NULL)
     {
       rq_to_add->curr->timer_stop = timer_gettime ();
-      int64_t d = rq_to_add->curr->timer_stop - rq_to_add->curr->timer_start;
-      rq_to_add->curr->vruntime += d * prio_to_weight[NICE_DEFAULT + 20] / prio_to_weight[rq_to_add->curr->nice + 20];
+      rq_to_add->curr->vruntime = calc_vruntime (rq_to_add->curr, 20);
       rq_to_add->curr->timer_start = timer_gettime ();
       set_min_vruntime (rq_to_add);
-      d = t->timer_stop - t->timer_start;
-      t->vruntime += d * prio_to_weight[NICE_DEFAULT] / prio_to_weight[t->nice];
+      t->vruntime = calc_vruntime (t, 0);
       t->vruntime = max(t->vruntime, rq_to_add->min_vruntime - 20000000);
     }
   else if (initial && rq_to_add->curr != NULL)
     {
-      // find_min_vruntime (rq_to_add, rq_to_add->curr);
       rq_to_add->curr->timer_stop = timer_gettime ();
-      int64_t d = rq_to_add->curr->timer_stop - rq_to_add->curr->timer_start;
-      rq_to_add->curr->vruntime += d * prio_to_weight[NICE_DEFAULT + 20] / prio_to_weight[rq_to_add->curr->nice + 20];
-      rq_to_add->curr->timer_start = timer_gettime ();
-      if (d)
+      rq_to_add->curr->vruntime = calc_vruntime (rq_to_add->curr, 20);
+      if (rq_to_add->curr->timer_stop - rq_to_add->curr->timer_start)
         {
           set_min_vruntime (rq_to_add);
         }
-      t->vruntime = rq_to_add->min_vruntime ? rq_to_add->min_vruntime : rq_to_add->curr->vruntime;
+      rq_to_add->curr->timer_start = timer_gettime ();
+      t->vruntime = rq_to_add->min_vruntime ? 
+                    rq_to_add->min_vruntime : 
+                    rq_to_add->curr->vruntime;
     }
 
   list_push_back (&rq_to_add->ready_list, &t->elem);
@@ -119,10 +123,7 @@ sched_yield (struct ready_queue *curr_rq, struct thread *current)
   curr_rq->nr_ready ++;
   current->timer_stop = timer_gettime ();
 
-  int64_t d = current->timer_stop - current->timer_start;
-  current->vruntime += d * prio_to_weight[NICE_DEFAULT + 20] / prio_to_weight[current->nice + 20];
-
-  // find_min_vruntime (curr_rq, current);
+  current->vruntime = calc_vruntime(current, 20); 
 
 }
 
@@ -161,9 +162,7 @@ sched_pick_next (struct ready_queue *curr_rq)
 enum sched_return_action
 sched_tick (struct ready_queue *curr_rq, struct thread *current UNUSED)
 {
-  int ready_or_running = curr_rq->curr != NULL ? curr_rq->nr_ready + 1 : curr_rq->nr_ready;
-  int64_t total_weight = queue_total_weight (curr_rq);
-  int64_t ideal_runtime = (4000000 * ready_or_running * prio_to_weight[current->nice + 20]) / total_weight;
+  int64_t ideal_runtime = calc_ideal_runtime(curr_rq, current);
   curr_rq->thread_ticks += timer_gettime () - curr_rq->thread_ticks;
   /* Enforce preemption. */
   if (curr_rq->thread_ticks >= ideal_runtime)
@@ -174,6 +173,7 @@ sched_tick (struct ready_queue *curr_rq, struct thread *current UNUSED)
     }
   return RETURN_NONE;
 }
+
 
 /* Called from thread_block (). The base scheduler does
    not need to do anything here, but your scheduler may. 
@@ -186,11 +186,11 @@ sched_block (struct ready_queue *rq UNUSED, struct thread *current UNUSED)
   current->timer_stop = timer_gettime ();
 }
 
-/* Function that finds the min_vruntime value and sets it up */
+/* Function that sets the min_vruntime */
 static void
 set_min_vruntime (struct ready_queue *rq)
 {
-  int64_t min_vruntime = (int64_t)1  << 62;
+  int64_t min_vruntime = INT64_MAX;
 
   if (rq->curr != NULL)
     {
@@ -203,7 +203,7 @@ set_min_vruntime (struct ready_queue *rq)
       min_vruntime = min (t->vruntime, min_vruntime);
     }
 
-  rq->min_vruntime = min_vruntime == (int64_t)1  << 62 ? 0 : min_vruntime;
+  rq->min_vruntime = min_vruntime == INT64_MAX ? 0 : min_vruntime;
 }
 
 /*  */
@@ -244,4 +244,21 @@ find_thread (struct ready_queue * rq)
         }
     }
   return t_front;
+}
+static int64_t calc_vruntime(struct thread * t, int64_t bonus)
+{
+  int64_t d = t->timer_stop - t->timer_start;
+  int64_t w0 = prio_to_weight[NICE_DEFAULT + bonus];
+  int64_t w = prio_to_weight[t->nice + bonus];
+  return t->vruntime + d * w0 / w;
+}
+static int64_t calc_ideal_runtime(struct ready_queue * rq, struct thread * curr)
+{
+  int64_t nanos = 4000000;
+  int64_t n = rq->curr != NULL ? 
+          rq->nr_ready + 1 : 
+          rq->nr_ready;
+  int64_t w = prio_to_weight[curr->nice + 20];
+  int64_t s = queue_total_weight (rq);
+  return nanos * n * w / s;
 }
