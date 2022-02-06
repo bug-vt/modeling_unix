@@ -58,6 +58,7 @@ sched_init (struct ready_queue *curr_rq)
 {
   list_init (&curr_rq->ready_list);
   curr_rq->min_vruntime = 0;
+  curr_rq->last_time = 0;
 }
 
 /* Called from thread.c:wake_up_new_thread () and
@@ -163,7 +164,9 @@ enum sched_return_action
 sched_tick (struct ready_queue *curr_rq, struct thread *current UNUSED)
 {
   int64_t ideal_runtime = calc_ideal_runtime(curr_rq, current);
-  curr_rq->thread_ticks += timer_gettime () - curr_rq->thread_ticks;
+  int64_t current_time = timer_gettime();
+  curr_rq->thread_ticks += current_time - curr_rq->last_time;
+  curr_rq->last_time = current_time;
   /* Enforce preemption. */
   if (curr_rq->thread_ticks >= ideal_runtime)
     {

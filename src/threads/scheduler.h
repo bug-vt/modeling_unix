@@ -41,6 +41,7 @@ struct ready_queue
 
   /* OUR CODE */ //----------------------------------NEW
   int64_t min_vruntime;
+  int64_t last_time;
 };
 
 void sched_init (struct ready_queue *);
