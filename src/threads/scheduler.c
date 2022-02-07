@@ -19,7 +19,7 @@ static inline int64_t min (int64_t x, int64_t y) {
 
 static int64_t calc_ideal_runtime(struct ready_queue *, struct thread *);
 static int64_t calc_vruntime(struct thread * t, int64_t bonus); 
-static void set_min_vruntime (struct ready_queue *);
+
 static int64_t queue_total_weight (struct ready_queue *);
 static struct thread *find_thread (struct ready_queue *);
 
@@ -190,7 +190,7 @@ sched_block (struct ready_queue *rq UNUSED, struct thread *current UNUSED)
 }
 
 /* Function that sets the min_vruntime */
-static void
+void
 set_min_vruntime (struct ready_queue *rq)
 {
   int64_t min_vruntime = INT64_MAX;
@@ -207,6 +207,19 @@ set_min_vruntime (struct ready_queue *rq)
     }
 
   rq->min_vruntime = min_vruntime == INT64_MAX ? 0 : min_vruntime;
+}
+
+/* OUR CODE */
+int64_t
+queue_weight (struct ready_queue *rq)
+{
+  int64_t total_weight = 0;
+  struct thread * t;
+  list_for_each_entry(t, &rq->ready_list.head, elem)
+    {
+      total_weight += prio_to_weight[t->nice + 20];
+    }
+  return total_weight;
 }
 
 /*  */
@@ -264,4 +277,10 @@ static int64_t calc_ideal_runtime(struct ready_queue * rq, struct thread * curr)
   int64_t w = prio_to_weight[curr->nice + 20];
   int64_t s = queue_total_weight (rq);
   return nanos * n * w / s;
+}
+
+uint32_t
+getThreadWeight(struct thread* t)
+{
+  return prio_to_weight[t->nice + 20];
 }
