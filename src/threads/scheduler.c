@@ -5,14 +5,16 @@
 #include "threads/spinlock.h"
 #include <debug.h>
 #include "devices/timer.h"
-#include <stdio.h> // debugging
+
 /* Scheduling. */
 #define TIME_SLICE 4            /* # of timer ticks to give each thread. */
 
 /* Functions for Virtual Runtime calculations */
+/* Returns the maximum between two integers */
 static inline int64_t max (int64_t x, int64_t y) {
     return x > y ? x : y;
 }
+/* Returns the minimum between two integers */
 static inline int64_t min (int64_t x, int64_t y) {
     return x < y && x != 0 ? x : y;
 }

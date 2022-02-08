@@ -109,12 +109,12 @@ struct thread
   /* Owned by thread.c. */
   unsigned magic; /* Detects stack overflow. */
 
-  /* OUR CODE */ //-----------------------------------------NEW
+  /* OUR CODE */
   /* Used for CFS in scheduler.c */
   int64_t vruntime; /* Virtual Runtime */
   /* CPU consumption */
-  int64_t timer_start;
-  int64_t timer_stop;
+  int64_t timer_start; /* The start of CPU consumption */
+  int64_t timer_stop; /* The end of CPU consumption */
 };
 
 void thread_init (void);
