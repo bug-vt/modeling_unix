@@ -51,4 +51,9 @@ struct thread *sched_pick_next (struct ready_queue *);
 enum sched_return_action sched_tick (struct ready_queue *, struct thread *);
 void sched_block (struct ready_queue *, struct thread *);
 
+/* OUR CODE */
+int64_t queue_weight (struct ready_queue *rq);
+void set_min_vruntime (struct ready_queue *rq);
+uint32_t getThreadWeight(struct thread* t);
+
 #endif /* THREADS_SCHEDULER_H_ */

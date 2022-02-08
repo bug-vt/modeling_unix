@@ -459,6 +459,77 @@ thread_get_nice (void)
   return thread_current ()->nice;
 }
 
+/* Balances load between CPU's by looking for a CPU with a load 
+ * larger than this CPU enough to tip the estabilished ratio, and
+ * then grabbing an appropriate amount of tasks from it's ready
+ * queue. Remember to make sure the thread running this can't be
+ * stolen by load balancing.
+ */
+static void
+balance_load (void)
+{
+  struct cpu* self = get_cpu ();
+  struct cpu* max = NULL;
+  int64_t maxLoad = 0;
+  int64_t currLoad;
+  for (unsigned int index = 0; index < ncpu; index++)
+  {
+    if (cpus[index].id == self->id)
+    { 
+       spinlock_acquire(&self->rq.lock);
+       continue;
+    }
+
+    spinlock_acquire (&cpus[index].rq.lock);
+    currLoad = queue_weight(&cpus[index].rq);
+    if (currLoad > maxLoad)
+    {
+      if (max != NULL)
+        spinlock_release (&max->rq.lock);
+      max = &cpus[index];
+      maxLoad = currLoad;
+    }
+    else
+      spinlock_release (&cpus[index].rq.lock);
+  }
+  
+  if (max != NULL)
+  {
+    int64_t myLoad = queue_weight(&self->rq);
+    if (maxLoad >= 2 * myLoad)
+    {
+      int64_t imbalance = (maxLoad - myLoad) / 2;
+      int64_t stolenWeight = 0;
+      bool front = true;
+      struct thread* stolen;
+      int64_t minVruntimeDiff = self->rq.min_vruntime - max->rq.min_vruntime;
+      while (stolenWeight < imbalance)
+      {
+        if (front)
+	{
+          stolen = list_entry(list_pop_front(&max->rq.ready_list), struct thread, elem); 
+	  front = false;
+	}
+	else
+        {
+          stolen = list_entry(list_pop_back(&max->rq.ready_list), struct thread, elem);
+          front = true;
+	}
+        stolenWeight += getThreadWeight(stolen); 
+	stolen->vruntime = stolen->vruntime - minVruntimeDiff;
+        if (stolen->vruntime < 0)
+	  stolen->vruntime = 0;
+        
+	list_push_front(&self->rq.ready_list, &stolen->elem);
+
+      }
+      set_min_vruntime(&max->rq);
+    } 
+    spinlock_release(&max->rq.lock);
+  }
+  spinlock_release(&self->rq.lock);
+}
+
 /* Idle thread.  Executes when no other thread is ready to run.
 
    The idle thread never appears in the
@@ -466,7 +537,7 @@ thread_get_nice (void)
    special case when the ready list is empty. */
 static void
 idle (void *idle_started_ UNUSED)
-{
+{ 
   for (;;)
     {
       /* Let someone else run. */
@@ -479,6 +550,7 @@ idle (void *idle_started_ UNUSED)
        *
        * The baseline implementation does not ensure this.
        */
+      balance_load ();
       thread_block (NULL);
 
       /* Re-enable interrupts and wait for the next one.
