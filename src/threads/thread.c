@@ -506,21 +506,21 @@ balance_load (void)
       while (stolenWeight < imbalance)
       {
         if (front)
-	{
+        {
           stolen = list_entry(list_pop_front(&max->rq.ready_list), struct thread, elem); 
-	  front = false;
-	}
-	else
+          front = false;
+        }
+        else
         {
           stolen = list_entry(list_pop_back(&max->rq.ready_list), struct thread, elem);
           front = true;
-	}
+        }
         stolenWeight += getThreadWeight(stolen); 
-	stolen->vruntime = stolen->vruntime - minVruntimeDiff;
+        stolen->vruntime = stolen->vruntime - minVruntimeDiff;
         if (stolen->vruntime < 0)
-	  stolen->vruntime = 0;
+          stolen->vruntime = 0;
         
-	list_push_front(&self->rq.ready_list, &stolen->elem);
+        list_push_front(&self->rq.ready_list, &stolen->elem);
 
       }
       set_min_vruntime(&max->rq);
