@@ -459,11 +459,9 @@ thread_get_nice (void)
   return thread_current ()->nice;
 }
 
-/* Balances load between CPU's by looking for a CPU with a load 
- * larger than this CPU enough to tip the estabilished ratio, and
- * then grabbing an appropriate amount of tasks from it's ready
- * queue. Remember to make sure the thread running this can't be
- * stolen by load balancing.
+/* Balances CPU load. Finds the CPU with the largest CPU load
+ * and checks if the imbalance is great enough. If it is
+ * threads are stolen until the imbalance is equalized.
  */
 static void
 balance_load (void)
@@ -472,37 +470,63 @@ balance_load (void)
   struct cpu* max = NULL;
   int64_t maxLoad = 0;
   int64_t currLoad;
+  
+  //Searching for the CPU with the largest load
   for (unsigned int index = 0; index < ncpu; index++)
   {
+    /* When this cpu is reached in the cpu array it's ready
+     * queue is grabbed here. This is done because it's ready queue
+     * must be grabbed at some point before adding stolen threads
+     * to it, and grabbing it here avoids possible deadlocks.
+     */
     if (cpus[index].id == self->id)
     { 
        spinlock_acquire(&self->rq.lock);
+       //Can't steal from own queue so continue.
        continue;
     }
-
+    
+    //Must aquire the queue lock before checking its load.
     spinlock_acquire (&cpus[index].rq.lock);
     currLoad = queue_weight(&cpus[index].rq);
     if (currLoad > maxLoad)
     {
+      //This thread is the largets found so far so save it and release
+      //the previous max cpu's lock.
       if (max != NULL)
         spinlock_release (&max->rq.lock);
       max = &cpus[index];
       maxLoad = currLoad;
     }
     else
+      /* The queue lock is only released when it's not the max.
+       * This is done because the max thread's queue lock
+       * must be held to prevent another thread from stealing from
+       * it before this thread can.
+       */
       spinlock_release (&cpus[index].rq.lock);
   }
   
+  //Time to do some thieving
   if (max != NULL)
   {
     int64_t myLoad = queue_weight(&self->rq);
+    //This is derived from the imbalance and check to find if load balancing
+    //should occur. (When maxLoad is solved for this inequality is found).
     if (maxLoad >= 2 * myLoad)
     {
       int64_t imbalance = (maxLoad - myLoad) / 2;
       int64_t stolenWeight = 0;
       bool front = true;
       struct thread* stolen;
+      
+      //This value is used to set the stolen queue's vruntime to be relative to
+      //this threads run queue.
       int64_t minVruntimeDiff = self->rq.min_vruntime - max->rq.min_vruntime;
+      
+      //This is done to steal from the front and back of the victim ready queue, to
+      //steal a good mix of high and low weighted threads and avoid stealing
+      //only high or only low weight queues.
       while (stolenWeight < imbalance)
       {
         if (front)
@@ -515,18 +539,28 @@ balance_load (void)
           stolen = list_entry(list_pop_back(&max->rq.ready_list), struct thread, elem);
           front = true;
         }
+        //Updates the total stolen weight, then changes the stolen threads vruntime
+	//to be relative to this cpu's ready queue.
         stolenWeight += getThreadWeight(stolen); 
         stolen->vruntime = stolen->vruntime - minVruntimeDiff;
+
+	//Preventing the stolen thread's runtime from being negative.
         if (stolen->vruntime < 0)
           stolen->vruntime = 0;
         
+        //Save the stolen thread
         list_push_front(&self->rq.ready_list, &stolen->elem);
 
       }
+      //Since the min runtime thread could have been stolen, update the victim's
+      //min vruntime.
       set_min_vruntime(&max->rq);
-    } 
+    }
+    //Finally, since thieving is done, release the victim's spinlock.
     spinlock_release(&max->rq.lock);
   }
+  //Release own spinlock here (rather than the above if, since 
+  //max could equal Null. Aka if no max ready queue was found (all zero).
   spinlock_release(&self->rq.lock);
 }
 
