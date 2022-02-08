@@ -210,6 +210,10 @@ set_min_vruntime (struct ready_queue *rq)
 }
 
 /* OUR CODE */
+
+/* Gets the weight of the ready queue, not including the
+ * running thread.
+ */
 int64_t
 queue_weight (struct ready_queue *rq)
 {
@@ -279,6 +283,8 @@ static int64_t calc_ideal_runtime(struct ready_queue * rq, struct thread * curr)
   return nanos * n * w / s;
 }
 
+/* Returns the given thread's weight
+ */
 uint32_t
 getThreadWeight(struct thread* t)
 {
