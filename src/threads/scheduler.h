@@ -39,8 +39,8 @@ struct ready_queue
   unsigned long nr_ready;     /* number of elements in ready_list.
                                  Allows O(1) access. */
 
-  /* OUR CODE */ //----------------------------------NEW
-  int64_t min_vruntime;
+  /* OUR CODE */
+  int64_t min_vruntime; /* Stores the lowest vruntime of the ready queue. */
   int64_t last_time;
 };
 

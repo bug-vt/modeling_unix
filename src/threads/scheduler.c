@@ -211,8 +211,6 @@ set_min_vruntime (struct ready_queue *rq)
   rq->min_vruntime = min_vruntime == INT64_MAX ? 0 : min_vruntime;
 }
 
-/* OUR CODE */
-
 /* Gets the weight of the ready queue, not including the
  * running thread.
  */
@@ -228,7 +226,8 @@ queue_weight (struct ready_queue *rq)
   return total_weight;
 }
 
-/*  */
+/* Gets the weight of the ready queue, including the
+ * running thread. */
 static int64_t
 queue_total_weight (struct ready_queue *rq)
 {
@@ -247,7 +246,8 @@ queue_total_weight (struct ready_queue *rq)
   return total_weight == 0 ? 1 : total_weight;
 }
 
-
+/* Finds a thread in the ready queue that has the
+ * lowest vruntime and lowest tid. */
 static struct thread *
 find_thread (struct ready_queue * rq)
 {
