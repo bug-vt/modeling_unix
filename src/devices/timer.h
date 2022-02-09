@@ -13,13 +13,13 @@
 /* Struct for handling timer sleeping OUR CODE*/
 struct waiting_thread
 {
-   // The tick this thread is waiting for
+   /* The tick this thread is waiting for. */
    int64_t when;
    
-   // Pointer to the thread for waking up on the correct tick
+   /* Pointer to the thread for waking up on the correct tick. */
    struct thread * to_wake;
 
-   // List element for linking inside the double list
+   /* List element for linking inside the double list. */
    struct list_elem elem;
 };
 
