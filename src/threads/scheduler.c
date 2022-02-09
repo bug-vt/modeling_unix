@@ -241,19 +241,6 @@ queue_total_weight (struct ready_queue *rq) {
       }   
     return total_weight == 0 ? 1 : total_weight; 
 }
-/*
-static int64_t
-queue_total_weight (struct ready_queue *rq)
-{
-  int64_t total_weight = 0;
-  if (rq->curr != NULL)
-    {
-      total_weight += prio_to_weight[rq->curr->nice + 20];
-    }
-  total_weight += queue_weight (rq);
-  return total_weight == 0 ? 1 : total_weight;
-}
-*/
 /* Called from sched_pick_next (). 
  * Finds a thread in the ready queue that has the
  * lowest vruntime and lowest tid. */
