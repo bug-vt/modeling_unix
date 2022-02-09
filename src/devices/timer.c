@@ -106,21 +106,13 @@ timer_sleep (int64_t ticks)
 {
   ASSERT (intr_get_level () == INTR_ON);
   
-  /*
-  int64_t start = timer_ticks ();
-  while (timer_elapsed (start) < ticks) 
-    thread_yield ();
-  */
-
   struct waiting_thread this_wait;
   this_wait.to_wake = thread_current ();
   this_wait.when = ticks + timer_ticks ();
   spinlock_acquire(&waiting_threads_lock);
   list_insert_ordered(&waiting_threads, &this_wait.elem, timer_sleep_lessThan, NULL); 
-  //spinlock_release(&waiting_threads_lock);
   thread_block (&waiting_threads_lock);
   spinlock_release(&waiting_threads_lock);
-  
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be

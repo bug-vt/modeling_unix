@@ -106,15 +106,16 @@ struct thread
   /* Owned by userprog/process.c. */
   uint32_t *pagedir; /* Page directory. */
 #endif
-  /* Owned by thread.c. */
-  unsigned magic; /* Detects stack overflow. */
-
+  
   /* OUR CODE */
   /* Used for CFS in scheduler.c */
   int64_t vruntime; /* Virtual Runtime */
   /* CPU consumption */
   int64_t timer_start; /* The start of CPU consumption */
   int64_t timer_stop; /* The end of CPU consumption */
+
+  /* Owned by thread.c. */
+  unsigned magic; /* Detects stack overflow. */
 };
 
 void thread_init (void);

@@ -75,8 +75,6 @@ sched_init (struct ready_queue *curr_rq)
    be rescheduled when this function returns, else returns
    RETURN_NONE */
 
-
-
 enum sched_return_action
 sched_unblock (struct ready_queue *rq_to_add, struct thread *t, int initial UNUSED)
 {
@@ -226,27 +224,38 @@ queue_weight (struct ready_queue *rq)
   return total_weight;
 }
 
-/* Gets the weight of the ready queue, including the
+/* Called from calc_ideal_runtime ().
+ * Gets the weight of the ready queue, including the
  * running thread. */
+static int64_t 
+queue_total_weight (struct ready_queue *rq) {   
+    int64_t total_weight = 0;   
+    if (rq->curr != NULL)     
+      {       
+        total_weight += prio_to_weight[rq->curr->nice + 20];     
+      }   
+    struct thread * t;   
+    list_for_each_entry(t, &rq->ready_list.head, elem)     
+      {       
+        total_weight += prio_to_weight[t->nice + 20];     
+      }   
+    return total_weight == 0 ? 1 : total_weight; 
+}
+/*
 static int64_t
 queue_total_weight (struct ready_queue *rq)
 {
   int64_t total_weight = 0;
-
   if (rq->curr != NULL)
     {
       total_weight += prio_to_weight[rq->curr->nice + 20];
     }
-  struct thread * t;
-  list_for_each_entry(t, &rq->ready_list.head, elem) 
-    {
-      total_weight += prio_to_weight[t->nice + 20];
-    }
-
+  total_weight += queue_weight (rq);
   return total_weight == 0 ? 1 : total_weight;
 }
-
-/* Finds a thread in the ready queue that has the
+*/
+/* Called from sched_pick_next (). 
+ * Finds a thread in the ready queue that has the
  * lowest vruntime and lowest tid. */
 static struct thread *
 find_thread (struct ready_queue * rq)
@@ -267,6 +276,9 @@ find_thread (struct ready_queue * rq)
     }
   return t_front;
 }
+/* Called from sched_unblock () as well as sched_yield ().
+ * Calculates the vruntime of a given thread.
+ */
 static int64_t calc_vruntime(struct thread * t, int64_t bonus)
 {
   int64_t d = t->timer_stop - t->timer_start;
@@ -274,6 +286,9 @@ static int64_t calc_vruntime(struct thread * t, int64_t bonus)
   int64_t w = prio_to_weight[t->nice + bonus];
   return t->vruntime + d * w0 / w;
 }
+/* Called from sched_next_tick ().
+ * Calculates the ideal runtime of a given thread.
+ */
 static int64_t calc_ideal_runtime(struct ready_queue * rq, struct thread * curr)
 {
   int64_t nanos = 4000000;
@@ -288,7 +303,7 @@ static int64_t calc_ideal_runtime(struct ready_queue * rq, struct thread * curr)
 /* Returns the given thread's weight
  */
 uint32_t
-getThreadWeight(struct thread* t)
+get_thread_weight(struct thread* t)
 {
   return prio_to_weight[t->nice + 20];
 }

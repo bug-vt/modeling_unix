@@ -546,7 +546,7 @@ balance_load (void)
         /* Updates the total stolen weight, then changes the stolen threads vruntime
 	       * to be relative to this cpu's ready queue.
          */
-        stolenWeight += getThreadWeight(stolen); 
+        stolenWeight += get_thread_weight (stolen); 
         stolen->vruntime = stolen->vruntime - minVruntimeDiff;
 
 	      /* Preventing the stolen thread's runtime from being negative. */

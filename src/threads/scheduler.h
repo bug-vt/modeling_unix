@@ -54,6 +54,6 @@ void sched_block (struct ready_queue *, struct thread *);
 /* OUR CODE */
 int64_t queue_weight (struct ready_queue *rq);
 void set_min_vruntime (struct ready_queue *rq);
-uint32_t getThreadWeight(struct thread* t);
+uint32_t get_thread_weight(struct thread* t);
 
 #endif /* THREADS_SCHEDULER_H_ */
