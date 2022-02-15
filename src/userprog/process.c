@@ -20,6 +20,8 @@
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
+/* Our Code */
+static char **string_array_from_string(const char *str);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -462,4 +464,29 @@ install_page (void *upage, void *kpage, bool writable)
      address, then map our page there. */
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
+}
+
+/*  */
+static char **
+string_array_from_string(const char *str)
+{
+  size_t size = strlen(str) + 1;
+  char temp[size];
+  char temp2[size];
+  strlcpy(temp, str, size);
+  strlcpy(temp2, str, size);
+
+  // char *token, *save_ptr;
+  // size_t array_size = 0;
+  // for (token = strtok_r (temp, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr))
+  //   array_size++;
+
+  // char **string_list = calloc (array_size, sizeof (char*));
+  // int pos = 0;
+
+  // for (token = strtok_r (temp2, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr))
+  //   string_list[pos++] = token;
+  
+  // return string_list;
+  return NULL;
 }
