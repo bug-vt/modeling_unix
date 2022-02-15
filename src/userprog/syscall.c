@@ -14,8 +14,8 @@ static void check_user_args (void *arg);
 
 static void sys_halt (void);
 static void sys_exit (int status);
-static pid_t sys_exec (const char *cmd_line);
-static int sys_wait (pid_t pid);
+static uin32_t sys_exec (const char *cmd_line);
+static int sys_wait (uin32_t pid);
 static bool sys_create (const char *file, unsigned initial_size);
 static bool sys_remove (const char *file);
 static int sys_open (const char* file);
@@ -36,7 +36,8 @@ static void
 syscall_handler (struct intr_frame *f) 
 {
   // printf ("system call!\n");
-  int sys_call_number = *((uint8_t*)(f->esp + 1));
+  uint32_t * userstack = (uint32_t *)f->esp;
+  int sys_call_number = userstack[0];
 
   switch (sys_call_number)
     {
@@ -47,64 +48,86 @@ syscall_handler (struct intr_frame *f)
         }
       case SYS_EXIT:
         {
-          int status = *((uint8_t*)(f->esp + 2));
+          int status = userstack[1];
           sys_exit (status);
           break;
         }
       case SYS_EXEC:
         {
-          // sys_exec ();
+          const char *cmd_line = (char *)userstack[1];
+          check_user_args ((void *)cmd_line);
+          f->eax = (uint32_t)sys_exec (cmd_line);
           break;
         }
       case SYS_WAIT:
         {
-          pid_t pid = ((pid_t)*((uint8_t*)(f->esp + 2)));
-          sys_wait (pid);
+          uin32_t pid = (uin32_t)userstack[1];
+          f->eax = (uint32_t)sys_wait (pid);
           break;
         }
       case SYS_CREATE:
         {
-          // sys_create ();
+          const char *file = (char *)userstack[1];
+          unsigned initial_size = (unsigned)userstack[2];
+          check_user_args ((void *)file);
+          f->eax = (uint32_t)sys_create (file, initial_size);
           break;
         }
       case SYS_REMOVE:
         {
-          // sys_remove ();
+          const char *file = (char *)userstack[1];
+          check_user_args ((void *)file);
+          f->eax = (uint32_t)sys_remove (file);
           break;
         }
       case SYS_OPEN:
         {
-          // sys_open ();
+          const char *file = (char *)userstack[1];
+          check_user_args ((void *)file);
+          f->eax = (uint32_t)sys_open (file);
           break;
         }
       case SYS_FILESIZE:
         {
-          // sys_filesize ();
+          int fd = userstack[1];
+          f->eax = (uint32_t)sys_filesize (fd);
           break;
         }
       case SYS_READ:
         {
-          // sys_read ();
+          int fd = userstack[1];
+          void *buffer = (void *)userstack[2];
+          unsigned size = (unsigned)userstack[3];
+          check_user_args (buffer);
+          f->eax = (uint32_t)sys_read (fd, buffer, size);
           break;
         }
       case SYS_WRITE:
         {
-          // sys_write ();
+          int fd = userstack[1];
+          const void *buffer = (void *)userstack[2];
+          unsigned size = (unsigned)userstack[3];
+          check_user_args (buffer);
+          f->eax = (uint32_t)sys_write (fd, buffer, size);
           break;
         }
       case SYS_SEEK:
         {
-          // sys_seek ();
+          int fd = userstack[1];
+          unsigned position = (unsigned)userstack[2];
+          sys_seek (fd, position);
           break;
         }
       case SYS_TELL:
         {
-          // sys_tell ();
+          int fd = userstack[1];
+          f->eax = (uint32_t)sys_tell (fd);
           break;
         }
       case SYS_CLOSE:
         {
-          // sys_close ();
+          int fd = userstack[1];
+          sys_close (fd);
           break;
         }
     }
