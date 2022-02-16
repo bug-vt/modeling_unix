@@ -1,4 +1,5 @@
 #include "userprog/process.h"
+#include "userprog/syscall.h"
 #include <debug.h>
 #include <inttypes.h>
 #include <round.h>
@@ -21,7 +22,7 @@
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 /* Our Code */
-// static char **string_array_from_string(const char *str);
+static void setup_args(const char *str, void **esp);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -61,6 +62,7 @@ start_process (void *file_name_)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
+  setup_args (file_name, &if_.esp);
   success = load (file_name, &if_.eip, &if_.esp);
 
   /* If load failed, quit. */
@@ -467,29 +469,28 @@ install_page (void *upage, void *kpage, bool writable)
 }
 
 /*  */
-// static char **
-// string_array_from_string(const char *str)
-// {
-//   size_t size = strlen(str) + 1;
-//   char temp[size];
-//   char temp2[size];
-//   strlcpy(temp, str, size);
-//   strlcpy(temp2, str, size);
+static void
+setup_args(const char *str, void **esp UNUSED)
+{
+  size_t size = strlen(str) + 1;
+  char temp[size];
+  char temp2[size];
+  strlcpy(temp, str, size);
+  strlcpy(temp2, str, size);
 
-//   char *token, *save_ptr;
-//   size_t array_size = 0;
-//   for (token = strtok_r (temp, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr))
-//     array_size++;
+  char *token, *save_ptr;
+  size_t array_size = 0;
+  for (token = strtok_r (temp, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr))
+    array_size++;
 
-//   char **string_list = calloc (array_size, sizeof (char*));
-//   int pos = 0;
+  char *string_list[array_size];
+  int pos = 0;
 
-//   for (token = strtok_r (temp2, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr))
-//     string_list[pos++] = token;
+  for (token = strtok_r (temp2, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr))
+    string_list[pos++] = token;
   
-//   return string_list;
-//   return NULL;
-// }
+  string_list;
+}
 
 
 // From Dr. Back's help session

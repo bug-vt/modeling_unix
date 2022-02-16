@@ -10,12 +10,10 @@
 static void syscall_handler (struct intr_frame *);
 
 /* Our Code */
-static void check_user_args (void *arg);
-
 static void sys_halt (void);
 static void sys_exit (int status);
-static uin32_t sys_exec (const char *cmd_line);
-static int sys_wait (uin32_t pid);
+static uint32_t sys_exec (const char *cmd_line);
+static int sys_wait (uint32_t pid);
 static bool sys_create (const char *file, unsigned initial_size);
 static bool sys_remove (const char *file);
 static int sys_open (const char* file);
@@ -61,7 +59,7 @@ syscall_handler (struct intr_frame *f)
         }
       case SYS_WAIT:
         {
-          uin32_t pid = (uin32_t)userstack[1];
+          uint32_t pid = (uint32_t)userstack[1];
           f->eax = (uint32_t)sys_wait (pid);
           break;
         }
@@ -107,7 +105,7 @@ syscall_handler (struct intr_frame *f)
           int fd = userstack[1];
           const void *buffer = (void *)userstack[2];
           unsigned size = (unsigned)userstack[3];
-          check_user_args (buffer);
+          check_const_user_args (buffer);
           f->eax = (uint32_t)sys_write (fd, buffer, size);
           break;
         }
@@ -135,99 +133,104 @@ syscall_handler (struct intr_frame *f)
 }
 
 /*  */
-static void
-check_user_args(void *arg)
+void
+check_user_args(void *arg UNUSED)
 {
-  return 0;
+  ;
+}
+void
+check_const_user_args (const void *arg UNUSED)
+{
+  ;
 }
 
 /*  */
 static void
 sys_halt(void)
 {
-  return 0;
+  asm volatile ("hlt");
 }
 
 /*  */
 static void
-sys_exit(int status)
+sys_exit(int status UNUSED)
 {
-  return 0;
+  ;
 }
 
 /*  */
-static pid_t
-sys_exec(const char *cmd_line)
+static uint32_t
+sys_exec(const char *cmd_line UNUSED)
 {
   return 0;
 }
 
 /*  */
 static int
-sys_wait(pid_t pid)
+sys_wait(uint32_t pid UNUSED)
 {
   return 0;
 }
 
 /*  */
 static bool
-sys_create(const char *file, unsigned initial_size)
+sys_create(const char *file UNUSED, unsigned initial_size UNUSED)
 {
   return 0;
 }
 
 /*  */
 static bool
-sys_remove(const char *file)
+sys_remove(const char *file UNUSED)
 {
   return 0;
 }
 
 /*  */
 static int
-sys_open(const char* file)
+sys_open(const char* file UNUSED)
 {
   return 0;
 }
 
 /*  */
 static int
-sys_filesize(int fd)
+sys_filesize(int fd UNUSED)
 {
   return 0;
 }
 
 /*  */
 static int
-sys_read(int fd, void *buffer, unsigned size)
+sys_read(int fd UNUSED, void *buffer UNUSED, unsigned size UNUSED)
 {
   return 0;
 }
 
 /*  */
 static int
-sys_write(int fd, const void *buffer, unsigned size)
+sys_write(int fd UNUSED, const void *buffer UNUSED, unsigned size UNUSED)
 {
   return 0;
 }
 
 /*  */
 static void
-sys_seek(int fd, unsigned position)
+sys_seek(int fd UNUSED, unsigned position UNUSED)
 {
-  return 0;
+  ;
 }
 
 /*  */
 static unsigned
-sys_tell(int fd)
+sys_tell(int fd UNUSED)
 {
   return 0;
 }
 
 /*  */
 static void
-sys_close(int fd)
+sys_close(int fd UNUSED)
 {
-  return 0;
+  ;
 }
