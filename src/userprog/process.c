@@ -28,34 +28,26 @@ static void setup_args(const char *str, void **esp);
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
   thread id, or TID_ERROR if the thread cannot be created. */
-tid_t
-process_execute (const char *line) 
-{
-  /* The file system limits a max file name of 14 chars */
-  const int MAX_ARG_LEN = 15;
-  
-  char *line_copy, *file_name, *save_ptr;
-  char temp[MAX_ARG_LEN];
-  tid_t tid;
 
-  /* Make a copy of line.
-     Otherwise there's a race between the caller and load(). */
-  line_copy = palloc_get_page (0);
-  if (line_copy == NULL)
-    return TID_ERROR;
-  strlcpy (line_copy, line, PGSIZE);
+tid_t 
+process_execute (const char *file_name) 
+{   
+    char *fn_copy;   
+    tid_t tid;   
 
-  /* Extract file name from the line */
-  strlcpy (temp, line, MAX_ARG_LEN);
-  file_name = strtok_r (temp, " ", &save_ptr);
+    /* Make a copy of FILE_NAME.      
+     * Otherwise there's a race between the caller and load(). */   
+    fn_copy = palloc_get_page (0);   
+    if (fn_copy == NULL)     
+        return TID_ERROR;   
+    strlcpy (fn_copy, file_name, PGSIZE);   
+    /* Create a new thread to execute FILE_NAME. */   
 
-  /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, NICE_DEFAULT, start_process, line_copy);
-  if (tid == TID_ERROR)
-    palloc_free_page (line_copy); 
-  return tid;
-}
-
+    tid = thread_create (file_name, NICE_DEFAULT, start_process, fn_copy); 
+    if (tid == TID_ERROR)  
+        palloc_free_page (fn_copy);   
+    return tid; 
+} 
 
 /* A thread function that loads a user process and starts it
    running. */
