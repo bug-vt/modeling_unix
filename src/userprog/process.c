@@ -475,8 +475,8 @@ setup_args(const char *line, void **esp)
 {
   const int MAX_ARGS = 512;
   int warning_surpresser;
-
-  char *argv[MAX_ARGS];
+  // check if the number of arguments is too much
+  char *argv[MAX_ARGS]; // use malloc/calloc, #include <threads/malloc.h>
   size_t size = strlen(line) + 1;
   char temp[size];
   strlcpy(temp, line, size);
@@ -574,6 +574,8 @@ setup_args(const char *line, void **esp)
 
 // checking values (has to be in both process.c and syscall.c)
 // check below C0000...
+// check if it maps to physical memory (if bad kill the user (thread_exit))
+//
 // test value by dereferencing
 //  if value succeeds, you're good to go
 //  else, use exception handler
