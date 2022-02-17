@@ -474,11 +474,15 @@ static int
 setup_args(const char *line, void **esp)
 {
   const int MAX_ARGS = 512;
+  int warning_surpresser;
 
   char *argv[MAX_ARGS];
-  char buf[PG_SIZE];
+  size_t size = strlen(line) + 1;
+  char temp[size];
+  strlcpy(temp, line, size);
 
-  strlcpy(buf, line, PG_SIZE);
+  // char buf[256];
+  // strlcpy(buf, line, 256);
 
   char *token, *save_ptr;
   int pos = 0;
@@ -495,35 +499,63 @@ setup_args(const char *line, void **esp)
   for (int index = pos - 1; index > pos; index --)
     {
       int str_len = strlen(argv[index]);
+      char *str_temp = (char*)*esp;
       for (int chr = 0; chr < str_len; chr ++)
         {
-          if (chr!)
+          if (!chr)
             {
-              **esp = '\0';
+              *str_temp = '\0';
             }
           else
             {
-              **esp = argv[index][str_len - chr];
+              *str_temp = argv[index][str_len - chr];
             }
           if (chr + 1 >= str_len)
             {
               break;
             }
-          *esp --;
+          str_temp --;
+          warning_surpresser = (int)*esp --;
           offset ++;
         }
       pointers[index] = (uint32_t)*esp;
-      *esp --;
+      warning_surpresser = (int)*esp --;
       offset ++;
     }
   /* Adding the word-align */
   while (offset % 4 != 0)
     {
-      **esp = (uint8_t)0;
-      *esp --;
+      // **esp = (uint8_t)0;
+      warning_surpresser = (int)*esp --;
       offset ++;
     }
+  warning_surpresser++;
   /* Adding the pointers */
+  char **str_ptr = (char**)*esp;
+  *esp -= 4;
+  offset += 4;
+  *(-- str_ptr) = NULL;
+  // **esp = NULL;
+  for (int index = pos - 1; index > pos; index --)
+    {
+      *esp -= 4;
+      offset += 4;
+      *(-- str_ptr) = (char *)pointers[index];
+      // **esp = pointers[index];
+    }
+  uint32_t *ptr = (uint32_t *)*esp;
+
+  *esp -= 4;
+  offset += 4;
+  ptr --;
+  ptr = (uint32_t *)(ptr + 1);
+  // **esp = *esp + 4;
+
+  *esp -= 4;
+  offset += 4;
+  ptr --;
+  *ptr = pos;
+  // **esp = pos;
   return offset;
 }
 
