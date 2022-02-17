@@ -27,26 +27,35 @@ static void setup_args(const char *str, void **esp);
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
-   thread id, or TID_ERROR if the thread cannot be created. */
+  thread id, or TID_ERROR if the thread cannot be created. */
 tid_t
-process_execute (const char *file_name) 
+process_execute (const char *line) 
 {
-  char *fn_copy;
+  /* The file system limits a max file name of 14 chars */
+  const int MAX_ARG_LEN = 15;
+  
+  char *line_copy, *file_name, *save_ptr;
+  char temp[MAX_ARG_LEN];
   tid_t tid;
 
-  /* Make a copy of FILE_NAME.
+  /* Make a copy of line.
      Otherwise there's a race between the caller and load(). */
-  fn_copy = palloc_get_page (0);
-  if (fn_copy == NULL)
+  line_copy = palloc_get_page (0);
+  if (line_copy == NULL)
     return TID_ERROR;
-  strlcpy (fn_copy, file_name, PGSIZE);
+  strlcpy (line_copy, line, PGSIZE);
+
+  /* Extract file name from the line */
+  strlcpy (temp, line, MAX_ARG_LEN);
+  file_name = strtok_r (temp, " ", &save_ptr);
 
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, NICE_DEFAULT, start_process, fn_copy);
+  tid = thread_create (file_name, NICE_DEFAULT, start_process, line_copy);
   if (tid == TID_ERROR)
-    palloc_free_page (fn_copy); 
+    palloc_free_page (line_copy); 
   return tid;
 }
+
 
 /* A thread function that loads a user process and starts it
    running. */
@@ -470,26 +479,23 @@ install_page (void *upage, void *kpage, bool writable)
 
 /*  */
 static void
-setup_args(const char *str, void **esp UNUSED)
+setup_args(const char *line, void **esp UNUSED)
 {
-  size_t size = strlen(str) + 1;
-  char temp[size];
-  char temp2[size];
-  strlcpy(temp, str, size);
-  strlcpy(temp2, str, size);
+  const int MAX_ARGS = 512;
+
+  char *argv[MAX_ARGS];
+  char buf[PG_SIZE];
+
+  strlcpy(buf, line, PG_SIZE);
 
   char *token, *save_ptr;
-  size_t array_size = 0;
-  for (token = strtok_r (temp, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr))
-    array_size++;
-
-  char *string_list[array_size];
   int pos = 0;
-
-  for (token = strtok_r (temp2, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr))
-    string_list[pos++] = token;
-  
-  string_list;
+  for (token = strtok_r (temp, " ", &save_ptr); token != NULL; 
+       token = strtok_r (NULL, " ", &save_ptr))
+    {
+      argv[pos++] = token;
+    }
+  argv[pos] = NULL;
 }
 
 
