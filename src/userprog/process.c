@@ -471,23 +471,75 @@ install_page (void *upage, void *kpage, bool writable)
 
 /*  */
 static void
-setup_args(const char *line, void **esp UNUSED)
+setup_args(const char *line, void **esp)
 {
-  const int MAX_ARGS = 512;
+  size_t size = strlen(line) + 1;
+  char temp[size];
+  char temp2[size];
+  strlcpy(temp, line, size);
+  strlcpy(temp2, line, size);
 
-  char *argv[MAX_ARGS];
-  char buf[PG_SIZE];
-
-  strlcpy(buf, line, PG_SIZE);
-
-  char *token, *save_ptr;
-  int pos = 0;
+  char *token, *save_ptr;   
+  size_t array_size = 0;
   for (token = strtok_r (temp, " ", &save_ptr); token != NULL; 
-       token = strtok_r (NULL, " ", &save_ptr))
+       token = strtok_r (NULL, " ", &save_ptr))     
     {
-      argv[pos++] = token;
+      array_size++;   
     }
+
+  char *argv[array_size];
+  int pos = 0;   
+  for (token = strtok_r (temp2, " ", &save_ptr); token != NULL; 
+       token = strtok_r (NULL, " ", &save_ptr))     
+    {
+      argv[pos++] = token;     
+    }
+
   argv[pos] = NULL;
+  pos--;
+
+  int offset = 0;
+
+  /* create a temp pointer here to make the code
+   * easier to read and write */
+  uint8_t * q = *(uint8_t **)esp;
+
+  /* push strings to the stack */
+  for (int i = pos; i > 0; i--)
+    {
+      size_t len = strlen(argv[i]) + 1;
+      q -= len;
+      strlcpy((char*) q, argv[i], len); 
+      offset += len;
+    }
+
+  /* calculate the word align offset */
+  q -= offset % 4;
+  memset(q, 0, offset % 4); 
+
+  /*add argument addresses to the stack */
+  for (int i = pos; i > 0; i--)
+    {
+      q -= sizeof(char *);
+      memcpy(q, &argv[i], sizeof(char*));
+    }
+  
+  /* push the address of argv to the stack */
+  /* WONT THIS (ARGV) BE UNINITIALIZED AT THE END OF 
+     THIS FUNCTION CALL IF WE USE THE STACK?? */
+  q -= sizeof(char**);
+  memcpy(q, &argv, sizeof(char**));
+
+  /* push argc to the stack */
+  q -= sizeof(int);
+  memcpy(q, &pos, sizeof(int));
+
+  /* add a fake return address (NULL) */
+  q -= sizeof(void*);
+  memset(q, 0, sizeof(void*));
+
+  /* sets esp to now point at q */
+  *esp = q;
 }
 
 
