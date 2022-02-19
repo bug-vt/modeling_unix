@@ -19,10 +19,12 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 
+#include <threads/malloc.h>
+
 static thread_func start_process NO_RETURN;
-static bool load (const char *cmdline, void (**eip) (void), void **esp);
+static bool load (const char *cmdline, void (**eip) (void), void **esp, int offset);
 /* Our Code */
-static void setup_args(const char *str, void **esp);
+static int setup_args(const char *str, void **esp);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -63,8 +65,8 @@ start_process (void *file_name_)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  setup_args (file_name, &if_.esp);
-  success = load (file_name, &if_.eip, &if_.esp);
+  int offset = setup_args (file_name, &if_.esp);
+  success = load (file_name, &if_.eip, &if_.esp, offset);
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
@@ -200,7 +202,7 @@ struct Elf32_Phdr
 #define PF_W 2          /* Writable. */
 #define PF_R 4          /* Readable. */
 
-static bool setup_stack (void **esp);
+static bool setup_stack (void **esp, int offset);
 static bool validate_segment (const struct Elf32_Phdr *, struct file *);
 static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
                           uint32_t read_bytes, uint32_t zero_bytes,
@@ -211,7 +213,7 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
    and its initial stack pointer into *ESP.
    Returns true if successful, false otherwise. */
 bool
-load (const char *file_name, void (**eip) (void), void **esp) 
+load (const char *file_name, void (**eip) (void), void **esp, int offset) 
 {
   struct thread *t = thread_current ();
   struct Elf32_Ehdr ehdr;
@@ -307,7 +309,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
     }
 
   /* Set up stack. */
-  if (!setup_stack (esp))
+  if (!setup_stack (esp, offset))
     goto done;
 
   /* Start address. */
@@ -432,7 +434,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory. */
 static bool
-setup_stack (void **esp) 
+setup_stack (void **esp, int offset) 
 {
   uint8_t *kpage;
   bool success = false;
@@ -442,7 +444,7 @@ setup_stack (void **esp)
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
       if (success)
-        *esp = PHYS_BASE - 12;
+        *esp = PHYS_BASE - offset;
       else
         palloc_free_page (kpage);
     }
@@ -470,7 +472,7 @@ install_page (void *upage, void *kpage, bool writable)
 }
 
 /*  */
-static void
+static int 
 setup_args(const char *line, void **esp)
 {
   size_t size = strlen(line) + 1;
@@ -487,7 +489,7 @@ setup_args(const char *line, void **esp)
       array_size++;   
     }
 
-  char *argv[array_size];
+  char ** argv = malloc(array_size);
   int pos = 0;   
   for (token = strtok_r (temp2, " ", &save_ptr); token != NULL; 
        token = strtok_r (NULL, " ", &save_ptr))     
@@ -510,12 +512,14 @@ setup_args(const char *line, void **esp)
       size_t len = strlen(argv[i]) + 1;
       q -= len;
       strlcpy((char*) q, argv[i], len); 
-      offset += len;
     }
 
-  /* calculate the word align offset */
-  q -= offset % 4;
-  memset(q, 0, offset % 4); 
+  /* calculates offset so far */
+  offset = (uint8_t*) *esp - q;
+
+  /* adds padding */
+  q -= 4 - (offset % 4);
+  memset(q, 0, 4 - (offset % 4)); 
 
   /*add argument addresses to the stack */
   for (int i = pos; i > 0; i--)
@@ -525,8 +529,6 @@ setup_args(const char *line, void **esp)
     }
   
   /* push the address of argv to the stack */
-  /* WONT THIS (ARGV) BE UNINITIALIZED AT THE END OF 
-     THIS FUNCTION CALL IF WE USE THE STACK?? */
   q -= sizeof(char**);
   memcpy(q, &argv, sizeof(char**));
 
@@ -537,9 +539,13 @@ setup_args(const char *line, void **esp)
   /* add a fake return address (NULL) */
   q -= sizeof(void*);
   memset(q, 0, sizeof(void*));
+  
+  /* recalculates the offset */
+  offset = (uint8_t*) *esp - q;
 
   /* sets esp to now point at q */
   *esp = q;
+  return offset;
 }
 
 
@@ -557,6 +563,8 @@ setup_args(const char *line, void **esp)
 
 // checking values (has to be in both process.c and syscall.c)
 // check below C0000...
+// check if it maps to physical memory (if bad kill the user (thread_exit))
+//
 // test value by dereferencing
 //  if value succeeds, you're good to go
 //  else, use exception handler
