@@ -497,20 +497,19 @@ setup_args(const char *line, void **esp)
       argv[pos++] = token;     
     }
 
-  argv[pos] = NULL;
-  pos--;
-
   int offset = 0;
+  uint8_t * pointers[array_size];
 
   /* create a temp pointer here to make the code
    * easier to read and write */
   uint8_t * q = *(uint8_t **)esp;
 
   /* push strings to the stack */
-  for (int i = pos; i > 0; i--)
+  for (int i = pos - 1; i >= 0; i--)
     {
       size_t len = strlen(argv[i]) + 1;
       q -= len;
+      pointers[i] = q;
       strlcpy((char*) q, argv[i], len); 
     }
 
@@ -520,17 +519,22 @@ setup_args(const char *line, void **esp)
   /* adds padding */
   q -= 4 - (offset % 4);
   memset(q, 0, 4 - (offset % 4)); 
+  
+  /* adds NULL to the end of argv */
+  q -= sizeof(char*);
+  memset(q, 0, sizeof(char*)); 
 
   /*add argument addresses to the stack */
-  for (int i = pos; i > 0; i--)
+  for (int i = pos - 1; i >= 0; i--)
     {
       q -= sizeof(char *);
-      memcpy(q, &argv[i], sizeof(char*));
+      memcpy(q, pointers[i], sizeof(char*));
     }
   
-  /* push the address of argv to the stack */
+  /* push the address of argv[0] to the stack */
+  uint8_t* argv_address = q;
   q -= sizeof(char**);
-  memcpy(q, &argv, sizeof(char**));
+  memcpy(q, &argv_address, sizeof(char**));
 
   /* push argc to the stack */
   q -= sizeof(int);
