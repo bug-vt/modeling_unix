@@ -24,6 +24,19 @@ static void sys_seek (int fd, unsigned position);
 static unsigned sys_tell (int fd);
 static void sys_close (int fd);
 
+// DON'T REMOVE UNTIL DONE
+// 1. static array of struct pointers [1024] for file descriptors
+// 2. parents only wait for their children. list of running threads
+// will be contained with the parent. design data structures so that
+// a parent will only wait for their children. this can be added to
+// thread.h. need to cover the case that the parent exits so that
+// the children will exit.
+// 3. use a pointer to a struct for the purpose of parent/child
+// interactions.
+// 4. exec () will call process_execute ().
+// 5. use locks on the waiting structures.
+
+
 void
 syscall_init (void) 
 {
