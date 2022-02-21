@@ -470,6 +470,8 @@ balance_load (void)
   struct cpu* max = NULL;
   int64_t maxLoad = 0;
   int64_t currLoad;
+  if (!self->rq.active)
+    return;
   
   /* Searching for the CPU with the largest load */
   for (unsigned int index = 0; index < ncpu; index++)
@@ -479,6 +481,9 @@ balance_load (void)
      * must be grabbed at some point before adding stolen threads
      * to it, and grabbing it here avoids possible deadlocks.
      */
+    if (!cpus[index].rq.active)
+      continue;
+
     if (cpus[index].id == self->id)
     { 
        spinlock_acquire(&self->rq.lock);
@@ -577,7 +582,7 @@ balance_load (void)
    ready list.  It is returned by next_thread_to_run() as a
    special case when the ready list is empty. */
 static void
-idle (void *idle_started_)
+idle (void *idle_started_ UNUSED)
 { 
   for (;;)
     {
@@ -590,8 +595,7 @@ idle (void *idle_started_)
        *
        * The baseline implementation does not ensure this.
        */
-      if (idle_started_ != NULL)
-        balance_load ();
+      balance_load ();
       thread_block (NULL);
 
       /* Re-enable interrupts and wait for the next one.

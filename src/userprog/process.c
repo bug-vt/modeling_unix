@@ -95,6 +95,8 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
+  for ( ; ; )
+    continue;
   return -1;
 }
 
@@ -500,9 +502,8 @@ setup_args(const char *line, void **esp)
 
   uint32_t pointers[pos];
   int offset = 0;
-  //int warning_surpresser; //remove later
   /* Adding the strings to the stack */
-  for (int index = pos - 1; index > pos; index --)
+  for (int index = pos - 1; index >= 0; index --)
     {
       int len = strlen(argv[index]) + 1;
       char *str_temp = (char*)*esp;
@@ -510,9 +511,9 @@ setup_args(const char *line, void **esp)
       *esp = *esp - len;
       pointers[index] = (uint32_t)str_temp;
       strlcpy(str_temp, argv[index], len);
-      *(str_temp + len) = '\0';
+      // *(str_temp + len - 1) = '\0';
       offset += len;
-      // for (int chr = 0; chr < str_len; chr ++)
+      // for (int chr = 0; chr < len; chr ++)
       //   {
       //     if (!chr)
       //       {
@@ -520,42 +521,36 @@ setup_args(const char *line, void **esp)
       //       }
       //     else
       //       {
-      //         *str_temp = argv[index][str_len - chr];
+      //         *str_temp = argv[index][len - chr];
       //       }
-      //     if (chr + 1 >= str_len)
+      //     if (chr + 1 >= len)
       //       {
       //         break;
       //       }
       //     str_temp --;
-      //     warning_surpresser = (int)*esp --;
+      //     *esp = *esp - 1;
       //     offset ++;
       //   }
       // pointers[index] = (uint32_t)*esp;
-      // warning_surpresser = (int)*esp --;
+      // *esp = *esp - 1;
       // offset ++;
     }
   /* Adding the word-align */
   *esp -= 4 - (offset % 4);
   memset(*esp, 0, 4 - (offset % 4));
   offset += 4 - (offset % 4);
-  // while (offset % 4 != 0)
-  //   {
-  //     //warning_surpresser = (int)*esp --;
-  //     *esp = *esp - 1;
-  //     offset ++;
-  //   }
-  //warning_surpresser++;
   /* Adding the pointers */
   char **str_ptr = (char**)*esp;
   *esp -= 4;
   offset += 4;
   *(-- str_ptr) = NULL;
-  for (int index = pos - 1; index > pos; index --)
+  for (int index = pos - 1; index >= 0; index --)
     {
       *esp -= 4;
       offset += 4;
       *(-- str_ptr) = (char *)pointers[index];
     }
+  /* Adding the pointer to the char* */
   uint32_t *ptr = (uint32_t *)*esp;
 
   *esp -= 4;
@@ -563,10 +558,15 @@ setup_args(const char *line, void **esp)
   ptr --;
   ptr = (uint32_t *)(ptr + 1);
 
+  /* Adding the number of args */
   *esp -= 4;
   offset += 4;
   ptr --;
   *ptr = pos;
+
+  /* Going back to the return arg */
+  ptr --;
+  *esp -= 4;
   free(argv);
   return offset;
 }

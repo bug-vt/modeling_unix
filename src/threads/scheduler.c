@@ -61,6 +61,7 @@ sched_init (struct ready_queue *curr_rq)
   list_init (&curr_rq->ready_list);
   curr_rq->min_vruntime = 0;
   curr_rq->last_time = 0;
+  curr_rq->active = 1;
 }
 
 /* Called from thread.c:wake_up_new_thread () and

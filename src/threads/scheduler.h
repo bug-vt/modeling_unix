@@ -42,6 +42,7 @@ struct ready_queue
   /* OUR CODE */
   int64_t min_vruntime; /* Stores the lowest vruntime of the ready queue. */
   int64_t last_time; /* Used for thread tick calculations for preemption. */
+  int active;
 };
 
 void sched_init (struct ready_queue *);
