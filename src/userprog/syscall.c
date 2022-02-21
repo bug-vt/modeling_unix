@@ -175,7 +175,7 @@ syscall_handler (struct intr_frame *f)
           break;
         }
     }
-  thread_exit ();
+  // thread_exit ();
 }
 
 /*  */

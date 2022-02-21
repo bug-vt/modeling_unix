@@ -20,6 +20,7 @@
 #include "threads/vaddr.h"
 
 #include <threads/malloc.h>
+#include <lib/stdio.h>
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp, int offset);
@@ -65,7 +66,10 @@ start_process (void *file_name_)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
+  hex_dump (0, if_.esp - 120, 120, true);
   int offset = setup_args (file_name, &if_.esp);
+  printf("split\n");
+  hex_dump (0, if_.esp - 120 + offset, 120, true);
   success = load (file_name, &if_.eip, &if_.esp, offset);
 
   /* If load failed, quit. */
@@ -566,7 +570,7 @@ setup_args(const char *line, void **esp)
 
   /* Going back to the return arg */
   ptr --;
-  *esp -= 4;
+  // *esp -= 4;
   free(argv);
   return offset;
 }
