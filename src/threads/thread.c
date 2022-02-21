@@ -577,7 +577,7 @@ balance_load (void)
    ready list.  It is returned by next_thread_to_run() as a
    special case when the ready list is empty. */
 static void
-idle (void *idle_started_ UNUSED)
+idle (void *idle_started_)
 { 
   for (;;)
     {
@@ -590,7 +590,8 @@ idle (void *idle_started_ UNUSED)
        *
        * The baseline implementation does not ensure this.
        */
-      balance_load ();
+      if (idle_started_ != NULL)
+        balance_load ();
       thread_block (NULL);
 
       /* Re-enable interrupts and wait for the next one.
