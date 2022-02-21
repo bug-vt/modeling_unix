@@ -7,6 +7,8 @@
 #include <filesys/file.h>
 #include <filesys/filesys.h>
 #include <filesys/inode.h>
+#include <devices/input.h>
+#include <lib/kernel/stdio.h>
 
 static void syscall_handler (struct intr_frame *);
 
@@ -256,7 +258,11 @@ sys_read(int fd, void *buffer, unsigned size)
 {
   if (fd == 0) /* reading from stdin */
     {
-      ; // need to use function input_getc but I can't find it
+      char *buf = buffer;
+      for (unsigned int index = 0; index < size; index ++)
+        {
+          buf[index] = input_getc ();
+        }
     }
   else
     {
@@ -272,7 +278,7 @@ sys_write(int fd, const void *buffer, unsigned size)
 {
   if (fd == 1) /* writing to stdout */
     {
-      ; // need to use function putbuf which is in <lib/kernal/stdio.h>
+      putbuf (buffer, size);
     }
   else
     {
