@@ -481,6 +481,7 @@ setup_args(const char *line, void **esp)
   strlcpy(temp, line, size);
   strlcpy(temp2, line, size);
 
+  // check if the number of arguments is too much
   char *token, *save_ptr;   
   size_t array_size = 0;
   for (token = strtok_r (temp, " ", &save_ptr); token != NULL; 
@@ -489,7 +490,7 @@ setup_args(const char *line, void **esp)
       array_size++;   
     }
 
-  char ** argv = malloc(array_size);
+  char ** argv = calloc(array_size, sizeof(char*));
   int pos = 0;   
   for (token = strtok_r (temp2, " ", &save_ptr); token != NULL; 
        token = strtok_r (NULL, " ", &save_ptr))     
@@ -497,58 +498,76 @@ setup_args(const char *line, void **esp)
       argv[pos++] = token;     
     }
 
+  uint32_t pointers[pos];
   int offset = 0;
-  uint8_t * pointers[array_size];
-
-  /* create a temp pointer here to make the code
-   * easier to read and write */
-  uint8_t * q = *(uint8_t **)esp;
-
-  /* push strings to the stack */
-  for (int i = pos - 1; i >= 0; i--)
+  //int warning_surpresser; //remove later
+  /* Adding the strings to the stack */
+  for (int index = pos - 1; index > pos; index --)
     {
-      size_t len = strlen(argv[i]) + 1;
-      q -= len;
-      pointers[i] = q;
-      strlcpy((char*) q, argv[i], len); 
+      int len = strlen(argv[index]) + 1;
+      char *str_temp = (char*)*esp;
+      str_temp -= len;
+      *esp = *esp - len;
+      pointers[index] = (uint32_t)str_temp;
+      strlcpy(str_temp, argv[index], len);
+      *(str_temp + len) = '\0';
+      offset += len;
+      // for (int chr = 0; chr < str_len; chr ++)
+      //   {
+      //     if (!chr)
+      //       {
+      //         *str_temp = '\0';
+      //       }
+      //     else
+      //       {
+      //         *str_temp = argv[index][str_len - chr];
+      //       }
+      //     if (chr + 1 >= str_len)
+      //       {
+      //         break;
+      //       }
+      //     str_temp --;
+      //     warning_surpresser = (int)*esp --;
+      //     offset ++;
+      //   }
+      // pointers[index] = (uint32_t)*esp;
+      // warning_surpresser = (int)*esp --;
+      // offset ++;
     }
-
-  /* calculates offset so far */
-  offset = (uint8_t*) *esp - q;
-
-  /* adds padding */
-  q -= 4 - (offset % 4);
-  memset(q, 0, 4 - (offset % 4)); 
-  
-  /* adds NULL to the end of argv */
-  q -= sizeof(char*);
-  memset(q, 0, sizeof(char*)); 
-
-  /*add argument addresses to the stack */
-  for (int i = pos - 1; i >= 0; i--)
+  /* Adding the word-align */
+  *esp -= 4 - (offset % 4);
+  memset(*esp, 0, 4 - (offset % 4));
+  offset += 4 - (offset % 4);
+  // while (offset % 4 != 0)
+  //   {
+  //     //warning_surpresser = (int)*esp --;
+  //     *esp = *esp - 1;
+  //     offset ++;
+  //   }
+  //warning_surpresser++;
+  /* Adding the pointers */
+  char **str_ptr = (char**)*esp;
+  *esp -= 4;
+  offset += 4;
+  *(-- str_ptr) = NULL;
+  for (int index = pos - 1; index > pos; index --)
     {
-      q -= sizeof(char *);
-      memcpy(q, pointers[i], sizeof(char*));
+      *esp -= 4;
+      offset += 4;
+      *(-- str_ptr) = (char *)pointers[index];
     }
-  
-  /* push the address of argv[0] to the stack */
-  uint8_t* argv_address = q;
-  q -= sizeof(char**);
-  memcpy(q, &argv_address, sizeof(char**));
+  uint32_t *ptr = (uint32_t *)*esp;
 
-  /* push argc to the stack */
-  q -= sizeof(int);
-  memcpy(q, &pos, sizeof(int));
+  *esp -= 4;
+  offset += 4;
+  ptr --;
+  ptr = (uint32_t *)(ptr + 1);
 
-  /* add a fake return address (NULL) */
-  q -= sizeof(void*);
-  memset(q, 0, sizeof(void*));
-  
-  /* recalculates the offset */
-  offset = (uint8_t*) *esp - q;
-
-  /* sets esp to now point at q */
-  *esp = q;
+  *esp -= 4;
+  offset += 4;
+  ptr --;
+  *ptr = pos;
+  free(argv);
   return offset;
 }
 

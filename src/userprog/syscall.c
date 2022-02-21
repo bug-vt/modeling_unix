@@ -6,6 +6,7 @@
 #include "threads/thread.h"
 #include <filesys/file.h>
 #include <filesys/filesys.h>
+#include <filesys/inode.h>
 
 static void syscall_handler (struct intr_frame *);
 
@@ -24,6 +25,18 @@ static void sys_seek (int fd, unsigned position);
 static unsigned sys_tell (int fd);
 static void sys_close (int fd);
 
+//static int get_fd_from_file (struct file *file);
+static struct file *get_file_from_fd (int fd);
+static int set_next_fd (struct file *file);
+
+struct fd_to_file {
+  int fd;
+  struct file * file;
+  bool active;
+};
+
+static struct fd_to_file fd_to_file[1024];
+
 // DON'T REMOVE UNTIL DONE
 // 1. static array of struct pointers [1024] for file descriptors
 // 2. parents only wait for their children. list of running threads
@@ -41,6 +54,24 @@ void
 syscall_init (void) 
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
+  fd_to_file[0].fd = 0;
+  fd_to_file[0].file = NULL;
+  fd_to_file[0].active = true;
+
+  fd_to_file[1].fd = 1;
+  fd_to_file[1].file = NULL;
+  fd_to_file[1].active = true;
+  
+  fd_to_file[2].fd = 2;
+  fd_to_file[2].file = NULL;
+  fd_to_file[2].active = true;
+  
+  for (int index = 3; index < 1024; index ++)
+    {
+      fd_to_file[index].fd = index;
+      fd_to_file[index].file = NULL;
+      fd_to_file[index].active = false;
+    }
 }
 
 static void
@@ -161,7 +192,7 @@ check_const_user_args (const void *arg UNUSED)
 static void
 sys_halt(void)
 {
-  asm volatile ("hlt");
+  ;
 }
 
 /*  */
@@ -187,43 +218,67 @@ sys_wait(uint32_t pid UNUSED)
 
 /*  */
 static bool
-sys_create(const char *file UNUSED, unsigned initial_size UNUSED)
+sys_create(const char *file, unsigned initial_size)
 {
-  return 0;
+  return filesys_create (file, initial_size);
 }
 
 /*  */
 static bool
-sys_remove(const char *file UNUSED)
+sys_remove(const char *file)
 {
+  return filesys_remove (file);
+}
+
+/*  */
+static int
+sys_open(const char* filename)
+{
+  struct file *file = filesys_open (filename);
+  if (file == NULL)
+    {
+      return -1;
+    }
+  return set_next_fd (file);
+}
+
+/*  */
+static int
+sys_filesize(int fd)
+{
+  struct file *file = get_file_from_fd (fd);
+  return (int)file_length(file);
+}
+
+/*  */
+static int
+sys_read(int fd, void *buffer, unsigned size)
+{
+  if (fd == 0) /* reading from stdin */
+    {
+      ; // need to use function input_getc but I can't find it
+    }
+  else
+    {
+      struct file *file = get_file_from_fd (fd);
+      return (int)file_read (file, buffer, size);
+    }
   return 0;
 }
 
 /*  */
 static int
-sys_open(const char* file UNUSED)
+sys_write(int fd, const void *buffer, unsigned size)
 {
-  return 0;
-}
-
-/*  */
-static int
-sys_filesize(int fd UNUSED)
-{
-  return 0;
-}
-
-/*  */
-static int
-sys_read(int fd UNUSED, void *buffer UNUSED, unsigned size UNUSED)
-{
-  return 0;
-}
-
-/*  */
-static int
-sys_write(int fd UNUSED, const void *buffer UNUSED, unsigned size UNUSED)
-{
+  if (fd == 1) /* writing to stdout */
+    {
+      ; // need to use function putbuf which is in <lib/kernal/stdio.h>
+    }
+  else
+    {
+      struct file *file = get_file_from_fd (fd);
+      return (int)file_write (file, buffer, size);
+    }
   return 0;
 }
 
@@ -243,7 +298,48 @@ sys_tell(int fd UNUSED)
 
 /*  */
 static void
-sys_close(int fd UNUSED)
+sys_close(int fd)
 {
-  ;
+  file_close (fd_to_file[fd].file);
+  fd_to_file[fd].file = NULL;
+  if (fd != 0 && fd != 1 && fd != 2)
+    {
+      fd_to_file[fd].active = false;
+    }
+}
+
+// /*  */
+// static int
+// get_fd_from_file (struct file *file)
+// {
+//   for (int index = 3; index < 1024; index ++)
+//     {
+//       if (fd_to_file[index].file == file)
+//         {
+//           return fd_to_file[index].fd;
+//         }
+//     }
+//   return NULL;
+// }
+
+/*  */
+static struct file *
+get_file_from_fd (int fd)
+{
+  return fd_to_file[fd].file;
+}
+
+static int
+set_next_fd (struct file *file)
+{
+  for (int index = 3; index < 1024; index ++)
+    {
+      if (!fd_to_file[index].active)
+        {
+          fd_to_file[index].file = file;
+          fd_to_file[index].active = true;
+          return fd_to_file[index].fd;
+        }
+    }
+  return -1;
 }
