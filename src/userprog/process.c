@@ -21,6 +21,19 @@
 
 #include <threads/malloc.h>
 #include <lib/stdio.h>
+#include <threads/synch.h>
+#include <threads/spinlock.h>
+
+
+struct process {
+  tid_t child_tid;
+  struct semaphore sema;
+  int reference_counter;
+  struct spinlock lock;
+  struct list_elem elem;
+}
+
+
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
