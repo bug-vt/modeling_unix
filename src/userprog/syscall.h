@@ -3,7 +3,7 @@
 
 void syscall_init (void);
 
-void check_user_args (void *arg);
-void check_const_user_args (const void *arg);
+void validate_ptr(const void *addr);
+void sys_exit (int status);
 
 #endif /* userprog/syscall.h */

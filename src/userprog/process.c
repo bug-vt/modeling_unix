@@ -23,6 +23,7 @@
 #include <lib/stdio.h>
 #include <threads/synch.h>
 #include <threads/spinlock.h>
+#include <userprog/syscall.h>
 
 static struct process *process_list[1024];
 
@@ -41,11 +42,11 @@ static int get_process_from_tid (tid_t child_tid);
 tid_t 
 process_execute (const char *line) 
 {   
-    /* Check for missing */
-    if (strcmp(line, "no-such-file") == 0) 
-      {
-        return -1;
-      }
+    // /* Check for missing */
+    // if (strcmp(line, "no-such-file") == 0) 
+    //   {
+    //     return -1;
+    //   }
 
     char *line_copy;   
     tid_t tid;   
@@ -67,6 +68,12 @@ process_execute (const char *line)
       {
         break;   
       } 
+    struct file *file = filesys_open (fname);
+    if (file == NULL) 
+      {
+        return -1;
+      }
+    file_close (file);
 
     tid = thread_create (fname, NICE_DEFAULT, start_process, line_copy); 
     int index = get_next_avail_process_index ();
@@ -89,7 +96,7 @@ process_execute (const char *line)
         free (proc);
       } 
     process_list[index] = proc;
-    return tid; 
+    return proc->self_tid; 
 } 
 
 /* A thread function that loads a user process and starts it

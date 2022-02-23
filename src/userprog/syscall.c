@@ -18,10 +18,7 @@
 static void syscall_handler (struct intr_frame *);
 
 /* Our Code */
-static void validate_ptr(const void *addr);
-
 static void sys_halt (void);
-static void sys_exit (int status);
 static uint32_t sys_exec (const char *cmd_line);
 static int sys_wait (uint32_t pid);
 static bool sys_create (const char *file, unsigned initial_size);
@@ -36,7 +33,7 @@ static void sys_close (int fd);
 
 static struct file *get_file_from_fd (int fd);
 static int set_next_fd (struct file *file);
-static void validate_fd (int fd);
+static void validate_fd (int fd, int syscall);
 
 struct fd_to_file {
   int fd;
@@ -87,6 +84,7 @@ static void
 syscall_handler (struct intr_frame *f) 
 {
   uint32_t * us = (uint32_t *)f->esp;
+  validate_ptr ((void*)us);
   int sys_call_number = us[0];
 
   switch (sys_call_number)
@@ -143,13 +141,14 @@ syscall_handler (struct intr_frame *f)
         {
           validate_ptr ((void *) us + 1);
           int fd = us[1];
+          validate_fd (fd, sys_call_number);
           f->eax = (uint32_t)sys_filesize (fd);
           break;
         }
       case SYS_READ:
         {
           int fd = us[1];
-          validate_fd (fd);
+          validate_fd (fd, sys_call_number);
           void *buffer = (void *)us[2];
           validate_ptr (buffer);
           unsigned size = (unsigned)us[3];
@@ -159,7 +158,7 @@ syscall_handler (struct intr_frame *f)
       case SYS_WRITE:
         {
           int fd = us[1];
-          //validate_fd (fd);
+          validate_fd (fd, sys_call_number);
           const void *buffer = (void *)us[2];
           validate_ptr (buffer);
           unsigned size = (unsigned)us[3];
@@ -169,7 +168,7 @@ syscall_handler (struct intr_frame *f)
       case SYS_SEEK:
         {
           int fd = us[1];
-          validate_fd (fd);
+          validate_fd (fd, sys_call_number);
           unsigned position = (unsigned)us[2];
           sys_seek (fd, position);
           break;
@@ -178,7 +177,7 @@ syscall_handler (struct intr_frame *f)
         {
           validate_ptr ((void*) us + 1);
           int fd = us[1];
-          validate_fd (fd);
+          validate_fd (fd, sys_call_number);
           f->eax = (uint32_t)sys_tell (fd);
           break;
         }
@@ -186,7 +185,7 @@ syscall_handler (struct intr_frame *f)
         {
           validate_ptr ((void*) us + 1);
           int fd = us[1];
-          validate_fd (fd);
+          validate_fd (fd, sys_call_number);
           sys_close (fd);
           break;
         }
@@ -224,10 +223,20 @@ validate_ptr(const void *addr)
 
 /*  */
 static void
-validate_fd (int fd)
+validate_fd (int fd, int syscall)
 {
-  if (fd < 3 || fd > 1023)
-    sys_exit (-1);
+  if (fd == 0 && syscall == SYS_READ)
+    {
+      ; /* Do nothing */
+    }
+  else if (fd == 1 && syscall == SYS_WRITE)
+    {
+      ; /* Do nothing */
+    }
+  else if (fd < 3 || fd > 1023)
+    {
+      sys_exit (-1);
+    }
 }
 
 /*  */
@@ -238,7 +247,7 @@ sys_halt(void)
 }
 
 /*  */
-static void
+void
 sys_exit(int status)
 {
   set_status (status);
