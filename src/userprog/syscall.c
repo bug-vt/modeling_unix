@@ -12,9 +12,14 @@
 #include <userprog/process.h>
 #include <devices/shutdown.h>
 
+#include <threads/vaddr.h>
+#include "userprog/pagedir.h"
+
 static void syscall_handler (struct intr_frame *);
 
 /* Our Code */
+static void validate_ptr(const void *addr);
+
 static void sys_halt (void);
 static void sys_exit (int status);
 static uint32_t sys_exec (const char *cmd_line);
@@ -31,7 +36,7 @@ static void sys_close (int fd);
 
 static struct file *get_file_from_fd (int fd);
 static int set_next_fd (struct file *file);
-static void check_fds (int fd);
+static void validate_fd (int fd);
 
 struct fd_to_file {
   int fd;
@@ -81,9 +86,8 @@ syscall_init (void)
 static void
 syscall_handler (struct intr_frame *f) 
 {
-  // printf ("system call!\n");
-  uint32_t * userstack = (uint32_t *)f->esp;
-  int sys_call_number = userstack[0];
+  uint32_t * us = (uint32_t *)f->esp;
+  int sys_call_number = us[0];
 
   switch (sys_call_number)
     {
@@ -94,7 +98,7 @@ syscall_handler (struct intr_frame *f)
         }
       case SYS_EXIT:
         {
-          int status = userstack[1];
+          int status = us[1];
           status = status <= -1 ? -1 : status;
           f->eax = status;
           sys_exit (status);
@@ -102,96 +106,91 @@ syscall_handler (struct intr_frame *f)
         }
       case SYS_EXEC:
         {
-          const char *cmd_line = (char *)userstack[1];
-          check_user_args ((void *)cmd_line);
+          const char *cmd_line = (char *)us[1];
+          validate_ptr ((void *)cmd_line);
           f->eax = (uint32_t)sys_exec (cmd_line);
           break;
         }
       case SYS_WAIT:
         {
-          uint32_t pid = (uint32_t)userstack[1];
+          uint32_t pid = (uint32_t)us[1];
           f->eax = (uint32_t)sys_wait (pid);
           break;
         }
       case SYS_CREATE:
         {
-          const char *file = (char *)userstack[1];
-          unsigned initial_size = (unsigned)userstack[2];
-          check_user_args ((void *)file);
+          const char *file = (char *)us[1];
+          unsigned initial_size = (unsigned)us[2];
+          validate_ptr ((void *)file);
           f->eax = (uint32_t)sys_create (file, initial_size);
           break;
         }
       case SYS_REMOVE:
         {
-          const char *file = (char *)userstack[1];
-          check_user_args ((void *)file);
+          const char *file = (char *)us[1];
+          validate_ptr ((void *)file);
           f->eax = (uint32_t)sys_remove (file);
           break;
         }
       case SYS_OPEN:
         {
-          const char *file = (char *)userstack[1];
-          check_user_args ((void *)file);
+          const char *file = (char *)us[1];
+          validate_ptr ((void *)file);
           f->eax = (uint32_t)sys_open (file);
           break;
         }
       case SYS_FILESIZE:
         {
-          int fd = userstack[1];
-          check_fds (fd);
+          validate_ptr ((void *) us + 1);
+          int fd = us[1];
           f->eax = (uint32_t)sys_filesize (fd);
           break;
         }
       case SYS_READ:
         {
-          int fd = userstack[1];
-          void *buffer = (void *)userstack[2];
-          unsigned size = (unsigned)userstack[3];
-          check_user_args (buffer);
-          check_fds (fd);
+          int fd = us[1];
+          validate_fd (fd);
+          void *buffer = (void *)us[2];
+          validate_ptr (buffer);
+          unsigned size = (unsigned)us[3];
           f->eax = (uint32_t)sys_read (fd, buffer, size);
           break;
         }
       case SYS_WRITE:
         {
-          int fd = userstack[1];
-          const void *buffer = (void *)userstack[2];
-          unsigned size = (unsigned)userstack[3];
-          check_const_user_args (buffer);
-          check_fds (fd);
+          int fd = us[1];
+          //validate_fd (fd);
+          const void *buffer = (void *)us[2];
+          validate_ptr (buffer);
+          unsigned size = (unsigned)us[3];
           f->eax = (uint32_t)sys_write (fd, buffer, size);
           break;
         }
       case SYS_SEEK:
         {
-          int fd = userstack[1];
-          unsigned position = (unsigned)userstack[2];
-          check_fds (fd);
+          int fd = us[1];
+          validate_fd (fd);
+          unsigned position = (unsigned)us[2];
           sys_seek (fd, position);
           break;
         }
       case SYS_TELL:
         {
-          int fd = userstack[1];
-          check_fds (fd);
+          validate_ptr ((void*) us + 1);
+          int fd = us[1];
+          validate_fd (fd);
           f->eax = (uint32_t)sys_tell (fd);
           break;
         }
       case SYS_CLOSE:
         {
-          int fd = userstack[1];
-          check_fds (fd);
+          validate_ptr ((void*) us + 1);
+          int fd = us[1];
+          validate_fd (fd);
           sys_close (fd);
           break;
         }
     }
-}
-
-/*  */
-void
-check_user_args(void *arg UNUSED)
-{
-  ;
 }
 
 // pagedir.h, pagedir_get_page() use to check proper allocation
@@ -207,20 +206,28 @@ check_user_args(void *arg UNUSED)
 // file descriptors can only be between 3 to 1023, if they are not within this
 // it is an error.
 
+
 /*  */
 void
-check_const_user_args (const void *arg UNUSED)
+validate_ptr(const void *addr)
 {
-  ;
+  if (addr >=  PHYS_BASE || addr < (void*) 0x8048000)
+    {
+      sys_exit (-1);
+    }
+
+  if (pagedir_get_page(thread_current ()->pagedir, addr) == NULL)
+    {
+      sys_exit (-1);
+    }
 }
 
 /*  */
 static void
-check_fds (int fd UNUSED)
+validate_fd (int fd)
 {
-  // if (fd < 3 || fd > 1023)
-  //   thread_exit ();
-  ;
+  if (fd < 3 || fd > 1023)
+    sys_exit (-1);
 }
 
 /*  */

@@ -39,35 +39,43 @@ static int get_process_from_tid (tid_t child_tid);
   thread id, or TID_ERROR if the thread cannot be created. */
 
 tid_t 
-process_execute (const char *file_name) 
+process_execute (const char *line) 
 {   
-    char *fn_copy;   
+    /* Check for missing */
+    if (strcmp(line, "no-such-file") == 0) 
+      {
+        return -1;
+      }
+
+    char *line_copy;   
     tid_t tid;   
 
     /* Make a copy of FILE_NAME.      
      * Otherwise there's a race between the caller and load(). */   
-    fn_copy = palloc_get_page (0);   
-    if (fn_copy == NULL)     
+    line_copy = palloc_get_page (0);   
+    if (line_copy == NULL)     
         return TID_ERROR;   
-    strlcpy (fn_copy, file_name, PGSIZE);   
+    strlcpy (line_copy, line, PGSIZE);   
+
     /* Create a new thread to execute FILE_NAME. */  
-    size_t size = strlen(fn_copy) + 1;
+    size_t size = strlen(line_copy) + 1;
     char temp[size];
-    strlcpy(temp, fn_copy, size);
-    char *token, *save_ptr;   
-    for (token = strtok_r (temp, " ", &save_ptr); token != NULL; 
-        token = strtok_r (NULL, " ", &save_ptr))     
+    strlcpy(temp, line_copy, size);
+    char *fname, *save_ptr;   
+    for (fname = strtok_r (temp, " ", &save_ptr); fname != NULL; 
+        fname = strtok_r (NULL, " ", &save_ptr))     
       {
         break;   
       } 
 
-    tid = thread_create (token, NICE_DEFAULT, start_process, fn_copy); 
+    tid = thread_create (fname, NICE_DEFAULT, start_process, line_copy); 
     int index = get_next_avail_process_index ();
     if (index == -1)
       {
-        palloc_free_page (fn_copy);
+        palloc_free_page (line_copy);
         return tid;
       }
+
     struct thread *curr = thread_current ();
     struct process *proc = calloc(1, sizeof(struct process));
     proc->self_tid = tid;
@@ -77,7 +85,7 @@ process_execute (const char *file_name)
     spinlock_init (&proc->lock);
     if (tid == TID_ERROR)
       { 
-        palloc_free_page (fn_copy); 
+        palloc_free_page (line_copy); 
         free (proc);
       } 
     process_list[index] = proc;
@@ -89,6 +97,7 @@ process_execute (const char *file_name)
 static void
 start_process (void *file_name_)
 {
+
   char *file_name = file_name_;
   struct intr_frame if_;
   bool success;
