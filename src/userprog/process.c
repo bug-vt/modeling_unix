@@ -42,12 +42,6 @@ static int get_process_from_tid (tid_t child_tid);
 tid_t 
 process_execute (const char *line) 
 {   
-    // /* Check for missing */
-    // if (strcmp(line, "no-such-file") == 0) 
-    //   {
-    //     return -1;
-    //   }
-
     char *line_copy;   
     tid_t tid;   
 
