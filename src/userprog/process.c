@@ -24,21 +24,14 @@
 #include <threads/synch.h>
 #include <threads/spinlock.h>
 
-
-struct process {
-  tid_t child_tid;
-  struct semaphore sema;
-  int reference_counter;
-  struct spinlock lock;
-  struct list_elem elem;
-}
-
-
+static struct process *process_list[1024];
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 /* Our Code */
-static int setup_args(const char *str, void **esp);
+static int setup_args (const char *str, void **esp);
+static int get_next_avail_process_index (void);
+static int get_process_from_tid (tid_t child_tid);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -60,8 +53,25 @@ process_execute (const char *file_name)
     /* Create a new thread to execute FILE_NAME. */   
 
     tid = thread_create (file_name, NICE_DEFAULT, start_process, fn_copy); 
-    if (tid == TID_ERROR)  
-        palloc_free_page (fn_copy);   
+    int index = get_next_avail_process_index ();
+    if (index == -1)
+      {
+        palloc_free_page (fn_copy);
+        return tid;
+      }
+    struct thread *curr = thread_current ();
+    struct process *proc = calloc(1, sizeof(struct process));
+    proc->self_tid = tid;
+    proc->parent_tid = curr->tid;
+    proc->reference_counter = 1;
+    sema_init (&proc->sema, 0);
+    spinlock_init (&proc->lock);
+    if (tid == TID_ERROR)
+      { 
+        palloc_free_page (fn_copy); 
+        free (proc);
+      } 
+    process_list[index] = proc;
     return tid; 
 } 
 
@@ -110,11 +120,29 @@ start_process (void *file_name_)
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) 
+process_wait (tid_t child_tid) 
 {
-  for ( ; ; )
-    continue;
-  return -1;
+  struct thread *curr = thread_current ();
+  int index = get_process_from_tid (child_tid);
+  if (index == -1)
+    return -1;
+  struct process *proc = process_list[index];
+  if (proc->parent_tid != curr->tid)
+    return -1;
+  spinlock_acquire (&proc->lock);
+  if (proc->reference_counter <= 0)
+    {
+      return -1;
+    }
+  spinlock_release (&proc->lock);
+  sema_down (&proc->sema);
+  spinlock_acquire (&proc->lock);
+  proc->reference_counter --;
+  int status = proc->status;
+  spinlock_release (&proc->lock);
+  free (proc);
+  process_list[index] = NULL;
+  return status;
 }
 
 /* Free the current process's resources. */
@@ -122,6 +150,23 @@ void
 process_exit (void)
 {
   struct thread *cur = thread_current ();
+  int index = get_process_from_tid (cur->tid);
+  if (index == -1)
+    return;
+  struct process *proc = process_list[index];
+  sema_up (&proc->sema);
+  for (int index = 0; index < 1024; index ++)
+    {
+      if (process_list[index] != NULL)
+        {
+          if (process_list[index]->parent_tid == cur->tid)
+            {
+              struct process *proc = process_list[index];
+              free (proc);
+              process_list[index] = NULL;
+            }
+        }
+    }
   uint32_t *pd;
 
   /* Destroy the current process's page directory and switch back
@@ -587,6 +632,45 @@ setup_args(const char *line, void **esp)
   offset += 4;
   free(argv);
   return offset;
+}
+
+/*  */
+static int
+get_next_avail_process_index (void)
+{
+  for (int index = 0; index < 1024; index ++)
+    {
+      if (process_list[index] == NULL)
+        {
+          return index;
+        }
+    }
+  return -1;
+}
+
+/*  */
+static int
+get_process_from_tid (tid_t child_tid)
+{
+  for (int index = 0; index < 1024; index ++)
+    {
+      if (process_list[index] != NULL)
+        {
+          if (process_list[index]->self_tid == child_tid)
+            return index;
+        }
+    }
+  return -1;
+}
+
+/*  */
+void 
+set_status (int status)
+{
+  struct thread *cur = thread_current ();
+  int index = get_process_from_tid (cur->tid);
+  struct process * proc = process_list[index];
+  proc->status = status;
 }
 
 

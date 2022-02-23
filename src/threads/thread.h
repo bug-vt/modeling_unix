@@ -26,6 +26,16 @@ typedef int tid_t;
 #define NICE_DEFAULT 0                  /* Default priority. */
 #define NICE_MAX 19                     /* Lowest priority. */
 
+/* Process */
+struct process {
+  tid_t parent_tid;        /*  */
+  tid_t self_tid;          /*  */
+  struct semaphore sema;   /*  */
+  int reference_counter;   /*  */
+  struct spinlock lock;    /*  */
+  int status;              /*  */
+};
+
 /* A kernel thread or user process.
 
    Each thread structure is stored in its own 4 kB page.  The

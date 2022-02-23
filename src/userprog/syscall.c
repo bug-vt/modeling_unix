@@ -9,6 +9,7 @@
 #include <filesys/inode.h>
 #include <devices/input.h>
 #include <lib/kernel/stdio.h>
+#include <userprog/process.h>
 
 static void syscall_handler (struct intr_frame *);
 
@@ -93,6 +94,7 @@ syscall_handler (struct intr_frame *f)
       case SYS_EXIT:
         {
           int status = userstack[1];
+          f->eax = status;
           sys_exit (status);
           break;
         }
@@ -199,8 +201,9 @@ sys_halt(void)
 
 /*  */
 static void
-sys_exit(int status UNUSED)
+sys_exit(int status)
 {
+  set_status (status);
   thread_exit ();
 }
 
