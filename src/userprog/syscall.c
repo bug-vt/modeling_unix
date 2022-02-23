@@ -10,6 +10,7 @@
 #include <devices/input.h>
 #include <lib/kernel/stdio.h>
 #include <userprog/process.h>
+#include <devices/shutdown.h>
 
 static void syscall_handler (struct intr_frame *);
 
@@ -28,9 +29,9 @@ static void sys_seek (int fd, unsigned position);
 static unsigned sys_tell (int fd);
 static void sys_close (int fd);
 
-//static int get_fd_from_file (struct file *file);
 static struct file *get_file_from_fd (int fd);
 static int set_next_fd (struct file *file);
+static void check_fds (int fd);
 
 struct fd_to_file {
   int fd;
@@ -94,6 +95,7 @@ syscall_handler (struct intr_frame *f)
       case SYS_EXIT:
         {
           int status = userstack[1];
+          status = status <= -1 ? -1 : status;
           f->eax = status;
           sys_exit (status);
           break;
@@ -136,6 +138,7 @@ syscall_handler (struct intr_frame *f)
       case SYS_FILESIZE:
         {
           int fd = userstack[1];
+          check_fds (fd);
           f->eax = (uint32_t)sys_filesize (fd);
           break;
         }
@@ -145,6 +148,7 @@ syscall_handler (struct intr_frame *f)
           void *buffer = (void *)userstack[2];
           unsigned size = (unsigned)userstack[3];
           check_user_args (buffer);
+          check_fds (fd);
           f->eax = (uint32_t)sys_read (fd, buffer, size);
           break;
         }
@@ -154,6 +158,7 @@ syscall_handler (struct intr_frame *f)
           const void *buffer = (void *)userstack[2];
           unsigned size = (unsigned)userstack[3];
           check_const_user_args (buffer);
+          check_fds (fd);
           f->eax = (uint32_t)sys_write (fd, buffer, size);
           break;
         }
@@ -161,23 +166,25 @@ syscall_handler (struct intr_frame *f)
         {
           int fd = userstack[1];
           unsigned position = (unsigned)userstack[2];
+          check_fds (fd);
           sys_seek (fd, position);
           break;
         }
       case SYS_TELL:
         {
           int fd = userstack[1];
+          check_fds (fd);
           f->eax = (uint32_t)sys_tell (fd);
           break;
         }
       case SYS_CLOSE:
         {
           int fd = userstack[1];
+          check_fds (fd);
           sys_close (fd);
           break;
         }
     }
-  // thread_exit ();
 }
 
 /*  */
@@ -186,6 +193,21 @@ check_user_args(void *arg UNUSED)
 {
   ;
 }
+
+// pagedir.h, pagedir_get_page() use to check proper allocation
+// checking values (has to be in both process.c and syscall.c)
+// check below C0000...
+// check if it maps to physical memory (if bad kill the user (thread_exit))
+//
+// test value by dereferencing
+//  if value succeeds, you're good to go
+//  else, use exception handler
+//
+// also check file descriptors
+// file descriptors can only be between 3 to 1023, if they are not within this
+// it is an error.
+
+/*  */
 void
 check_const_user_args (const void *arg UNUSED)
 {
@@ -194,9 +216,18 @@ check_const_user_args (const void *arg UNUSED)
 
 /*  */
 static void
+check_fds (int fd UNUSED)
+{
+  // if (fd < 3 || fd > 1023)
+  //   thread_exit ();
+  ;
+}
+
+/*  */
+static void
 sys_halt(void)
 {
-  ;
+  shutdown_power_off ();
 }
 
 /*  */
@@ -209,16 +240,16 @@ sys_exit(int status)
 
 /*  */
 static uint32_t
-sys_exec(const char *cmd_line UNUSED)
+sys_exec(const char *cmd_line)
 {
-  return 0;
+  return process_execute (cmd_line);
 }
 
 /*  */
 static int
-sys_wait(uint32_t pid UNUSED)
+sys_wait(uint32_t pid)
 {
-  return 0;
+  return process_wait (pid);
 }
 
 /*  */
@@ -293,16 +324,18 @@ sys_write(int fd, const void *buffer, unsigned size)
 
 /*  */
 static void
-sys_seek(int fd UNUSED, unsigned position UNUSED)
+sys_seek(int fd, unsigned position)
 {
-  ;
+  struct file *file = get_file_from_fd (fd);
+  file_seek (file, position);
 }
 
 /*  */
 static unsigned
-sys_tell(int fd UNUSED)
+sys_tell(int fd)
 {
-  return 0;
+  struct file *file = get_file_from_fd (fd);
+  return (unsigned)file_tell (file);
 }
 
 /*  */
@@ -316,20 +349,6 @@ sys_close(int fd)
       fd_to_file[fd].active = false;
     }
 }
-
-// /*  */
-// static int
-// get_fd_from_file (struct file *file)
-// {
-//   for (int index = 3; index < 1024; index ++)
-//     {
-//       if (fd_to_file[index].file == file)
-//         {
-//           return fd_to_file[index].fd;
-//         }
-//     }
-//   return NULL;
-// }
 
 /*  */
 static struct file *

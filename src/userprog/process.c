@@ -50,9 +50,18 @@ process_execute (const char *file_name)
     if (fn_copy == NULL)     
         return TID_ERROR;   
     strlcpy (fn_copy, file_name, PGSIZE);   
-    /* Create a new thread to execute FILE_NAME. */   
+    /* Create a new thread to execute FILE_NAME. */  
+    size_t size = strlen(fn_copy) + 1;
+    char temp[size];
+    strlcpy(temp, fn_copy, size);
+    char *token, *save_ptr;   
+    for (token = strtok_r (temp, " ", &save_ptr); token != NULL; 
+        token = strtok_r (NULL, " ", &save_ptr))     
+      {
+        break;   
+      } 
 
-    tid = thread_create (file_name, NICE_DEFAULT, start_process, fn_copy); 
+    tid = thread_create (token, NICE_DEFAULT, start_process, fn_copy); 
     int index = get_next_avail_process_index ();
     if (index == -1)
       {
@@ -90,7 +99,18 @@ start_process (void *file_name_)
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
   // hex_dump (0, if_.esp - 120, 120, true);
-  success = load (file_name, &if_.eip, &if_.esp);
+
+  size_t size = strlen(file_name_) + 1;
+  char temp[size];
+  strlcpy(temp, file_name_, size);
+  char *token, *save_ptr;   
+  for (token = strtok_r (temp, " ", &save_ptr); token != NULL; 
+      token = strtok_r (NULL, " ", &save_ptr))     
+    {
+      break;   
+    } 
+
+  success = load (token, &if_.eip, &if_.esp);
   setup_args (file_name, &if_.esp);
   // printf("split\n");
   // hex_dump (0, if_.esp - 120 + offset, 120, true);
@@ -674,24 +694,3 @@ set_status (int status)
   struct process * proc = process_list[index];
   proc->status = status;
 }
-
-
-// From Dr. Back's help session
-// do tokenization in the child (make " str example" -> ["str", "example"])
-
-// stack -> IN top of stack
-// OUT -> value to be placed into %esp
-// setup_stack (..., uint8_t ** stack) {
-//   uint8_t * q = *(uint32_t *)stack;
-//   q-=20;
-//   strlcpy(p, "arg", ...);
-//   uint32_t * p = ...
-// }
-
-// checking values (has to be in both process.c and syscall.c)
-// check below C0000...
-// check if it maps to physical memory (if bad kill the user (thread_exit))
-//
-// test value by dereferencing
-//  if value succeeds, you're good to go
-//  else, use exception handler
