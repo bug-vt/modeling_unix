@@ -154,6 +154,7 @@ process_exit (void)
   if (index == -1)
     return;
   struct process *proc = process_list[index];
+  int status = proc->status;
   sema_up (&proc->sema);
   for (int index = 0; index < 1024; index ++)
     {
@@ -168,6 +169,7 @@ process_exit (void)
         }
     }
   uint32_t *pd;
+  printf("%s: exit(%d)\n", cur->name, status);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
