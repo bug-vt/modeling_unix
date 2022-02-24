@@ -14,6 +14,7 @@
 
 #include <threads/vaddr.h>
 #include <userprog/pagedir.h>
+#include <lib/string.h>
 
 static void syscall_handler (struct intr_frame *);
 
@@ -32,7 +33,7 @@ static unsigned sys_tell (int fd);
 static void sys_close (int fd);
 
 static struct file *get_file_from_fd (int fd);
-static int set_next_fd (struct file *file);
+static int set_next_fd (struct file *file, const char *filename);
 static void validate_fd (int fd, int syscall);
 
 struct fd_to_file {
@@ -296,7 +297,7 @@ sys_open(const char* filename)
     {
       return -1;
     }
-  return set_next_fd (file);
+  return set_next_fd (file, filename);
 }
 
 /*  */
@@ -398,7 +399,7 @@ get_file_from_fd (int fd)
 }
 
 static int
-set_next_fd (struct file *file)
+set_next_fd (struct file *file, const char *filename)
 {
   for (int index = 3; index < 1024; index ++)
     {
@@ -409,10 +410,8 @@ set_next_fd (struct file *file)
           struct thread *cur = thread_current ();
           fd_to_file[index].tid = cur->tid;
 
-          /* Check if it executable */
-          int buf;
-          file_read_at (file, &buf, 4, 0);
-          if (0x464c457f == buf)
+          /* Check if it is a running executable */
+          if (strcmp (filename, cur->name) == 0)
             file_deny_write (file);
           return fd_to_file[index].fd;
         }
