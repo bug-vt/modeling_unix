@@ -37,27 +37,16 @@ static struct file *get_file_from_fd (int fd);
 static int set_next_fd (struct file *file, const char *filename);
 static void validate_fd (int fd, int syscall);
 
+/* Struct that maps a file to a file descriptor */
 struct fd_to_file {
-  int fd;
-  struct file * file;
-  bool active;
-  int tid;
+  int fd;               /* File descriptor */
+  struct file * file;   /* File */
+  bool active;          /* Checks if current file descriptor map is active */
+  int tid;              /* The tid of the associated file descriptor */
 };
 
+/* Array that stores the file descriptor mappings */
 static struct fd_to_file fd_to_file[1024];
-
-// DON'T REMOVE UNTIL DONE
-// 1. static array of struct pointers [1024] for file descriptors
-// 2. parents only wait for their children. list of running threads
-// will be contained with the parent. design data structures so that
-// a parent will only wait for their children. this can be added to
-// thread.h. need to cover the case that the parent exits so that
-// the children will exit.
-// 3. use a pointer to a struct for the purpose of parent/child
-// interactions.
-// 4. exec () will call process_execute ().
-// 5. use locks on the waiting structures.
-
 
 void
 syscall_init (void) 
@@ -200,21 +189,7 @@ syscall_handler (struct intr_frame *f)
     }
 }
 
-// pagedir.h, pagedir_get_page() use to check proper allocation
-// checking values (has to be in both process.c and syscall.c)
-// check below C0000...
-// check if it maps to physical memory (if bad kill the user (thread_exit))
-//
-// test value by dereferencing
-//  if value succeeds, you're good to go
-//  else, use exception handler
-//
-// also check file descriptors
-// file descriptors can only be between 3 to 1023, if they are not within this
-// it is an error.
-
-
-/*  */
+/* Checks if the current pointer is a valid one */
 void
 validate_ptr(const void *addr)
 {
@@ -229,7 +204,7 @@ validate_ptr(const void *addr)
     }
 }
 
-/*  */
+/* Checks if the current file descriptor is a valid one */
 static void
 validate_fd (int fd, int syscall)
 {
@@ -247,14 +222,14 @@ validate_fd (int fd, int syscall)
     }
 }
 
-/*  */
+/* System call for halting */
 static void
 sys_halt(void)
 {
   shutdown_power_off ();
 }
 
-/*  */
+/* System call for exiting */
 void
 sys_exit(int status)
 {
@@ -262,21 +237,21 @@ sys_exit(int status)
   thread_exit ();
 }
 
-/*  */
+/* System call for executing */
 static uint32_t
 sys_exec(const char *cmd_line)
 {
   return process_execute (cmd_line);
 }
 
-/*  */
+/* System call for waiting */
 static int
 sys_wait(uint32_t pid)
 {
   return process_wait (pid);
 }
 
-/*  */
+/* System call for creating */
 static bool
 sys_create(const char *file, unsigned initial_size)
 {
@@ -286,7 +261,7 @@ sys_create(const char *file, unsigned initial_size)
   return val;
 }
 
-/*  */
+/* System call for removing */
 static bool
 sys_remove(const char *file)
 {
@@ -296,7 +271,7 @@ sys_remove(const char *file)
   return val;
 }
 
-/*  */
+/* System call for opening */
 static int
 sys_open(const char* filename)
 {
@@ -312,7 +287,7 @@ sys_open(const char* filename)
   return fd;
 }
 
-/*  */
+/* System call for obtaining the filesize */
 static int
 sys_filesize(int fd)
 {
@@ -328,7 +303,7 @@ sys_filesize(int fd)
   return size;
 }
 
-/*  */
+/* System call for reading */
 static int
 sys_read(int fd, void *buffer, unsigned size)
 {
@@ -358,7 +333,7 @@ sys_read(int fd, void *buffer, unsigned size)
   return 0;
 }
 
-/*  */
+/* System call for writing */
 static int
 sys_write(int fd, const void *buffer, unsigned size)
 {
@@ -384,7 +359,7 @@ sys_write(int fd, const void *buffer, unsigned size)
   return 0;
 }
 
-/*  */
+/* System call for seeking */
 static void
 sys_seek(int fd, unsigned position)
 {
@@ -399,7 +374,7 @@ sys_seek(int fd, unsigned position)
   lock_release (&filesys_lock);
 }
 
-/*  */
+/* System call for telling */
 static unsigned
 sys_tell(int fd)
 {
@@ -415,7 +390,7 @@ sys_tell(int fd)
   return position;
 }
 
-/*  */
+/* System call for closing */
 static void
 sys_close(int fd)
 {
@@ -444,13 +419,16 @@ sys_close(int fd)
   lock_release (&filesys_lock);
 }
 
-/*  */
+/* Obtains a file from file descriptor */
 static struct file *
 get_file_from_fd (int fd)
 {
   return fd_to_file[fd].file;
 }
 
+/* Finds the next available file descriptor mapping and
+ * sets the values within it. Also checks if the file
+ * can be written into. */
 static int
 set_next_fd (struct file *file, const char *filename)
 {

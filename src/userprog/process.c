@@ -114,7 +114,6 @@ start_process (void *file_name_)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  // hex_dump (0, if_.esp - 120, 120, true);
 
   size_t size = strlen(file_name_) + 1;
   char temp[size];
@@ -128,8 +127,6 @@ start_process (void *file_name_)
 
   success = load (token, &if_.eip, &if_.esp);
   setup_args (file_name, &if_.esp);
-  // printf("split\n");
-  // hex_dump (0, if_.esp - 120 + offset, 120, true);
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
@@ -169,20 +166,24 @@ process_wait (tid_t child_tid)
   int index = get_process_from_tid (child_tid);
   if (index == -1)
     return -1;
+
   struct process *proc = process_list[index];
   if (proc->parent_tid != curr->tid)
     return -1;
+
   spinlock_acquire (&proc->lock);
   if (proc->reference_counter <= 0)
     {
       return -1;
     }
   spinlock_release (&proc->lock);
+
   sema_down (&proc->sema);
   spinlock_acquire (&proc->lock);
   proc->reference_counter --;
   int status = proc->status;
   spinlock_release (&proc->lock);
+  
   free (proc);
   process_list[index] = NULL;
   return status;
@@ -200,6 +201,7 @@ process_exit (void)
   int status = proc->status;
   printf("%s: exit(%d)\n", cur->name, status);
   sema_up (&proc->sema);
+  /* Frees any process entries where the current process is the parent */
   for (int index = 0; index < 1024; index ++)
     {
       if (process_list[index] != NULL)
@@ -583,7 +585,8 @@ install_page (void *upage, void *kpage, bool writable)
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
 }
 
-/*  */
+/* Sets up the stack so that it can be used in
+ * user programs */
 static int 
 setup_args(const char *line, void **esp)
 {
@@ -621,29 +624,7 @@ setup_args(const char *line, void **esp)
       *esp = *esp - len;
       pointers[index] = (uint32_t)str_temp;
       strlcpy(str_temp, argv[index], len);
-      // *(str_temp + len - 1) = '\0';
       offset += len;
-      // for (int chr = 0; chr < len; chr ++)
-      //   {
-      //     if (!chr)
-      //       {
-      //         *str_temp = '\0';
-      //       }
-      //     else
-      //       {
-      //         *str_temp = argv[index][len - chr];
-      //       }
-      //     if (chr + 1 >= len)
-      //       {
-      //         break;
-      //       }
-      //     str_temp --;
-      //     *esp = *esp - 1;
-      //     offset ++;
-      //   }
-      // pointers[index] = (uint32_t)*esp;
-      // *esp = *esp - 1;
-      // offset ++;
     }
   /* Adding the word-align */
   *esp -= 4 - (offset % 4);
@@ -682,7 +663,8 @@ setup_args(const char *line, void **esp)
   return offset;
 }
 
-/*  */
+/* Gets the next available index in the
+ * process array */
 static int
 get_next_avail_process_index (void)
 {
@@ -696,7 +678,8 @@ get_next_avail_process_index (void)
   return -1;
 }
 
-/*  */
+/* Gets an index for the process array from
+ * a tid */
 static int
 get_process_from_tid (tid_t child_tid)
 {
@@ -711,7 +694,8 @@ get_process_from_tid (tid_t child_tid)
   return -1;
 }
 
-/*  */
+/* Sets the status of the process for when the
+ * child exits */
 void 
 set_status (int status)
 {

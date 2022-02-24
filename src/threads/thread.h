@@ -28,13 +28,13 @@ typedef int tid_t;
 
 /* Process */
 struct process {
-  tid_t parent_tid;        /*  */
-  tid_t self_tid;          /*  */
-  struct semaphore sema;   /*  */
-  struct semaphore exit;   /*  */
-  int reference_counter;   /*  */
-  struct spinlock lock;    /*  */
-  int status;              /*  */
+  tid_t parent_tid;        /* Parent tid of the process */
+  tid_t self_tid;          /* The current tid of the process */
+  struct semaphore sema;   /* The semaphore that's used for waiting */
+  struct semaphore exit;   /* The semaphore that's used for checking errors and exiting */
+  int reference_counter;   /* Stores the amount of threads connected to this struct */
+  struct spinlock lock;    /* The spinlock that protects the field above */
+  int status;              /* Holds the status of the child process */
 };
 
 /* A kernel thread or user process.
