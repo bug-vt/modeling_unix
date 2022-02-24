@@ -39,6 +39,7 @@ struct fd_to_file {
   int fd;
   struct file * file;
   bool active;
+  int tid;
 };
 
 static struct fd_to_file fd_to_file[1024];
@@ -63,20 +64,24 @@ syscall_init (void)
   fd_to_file[0].fd = 0;
   fd_to_file[0].file = NULL;
   fd_to_file[0].active = true;
+  fd_to_file[0].tid = 0;
 
   fd_to_file[1].fd = 1;
   fd_to_file[1].file = NULL;
   fd_to_file[1].active = true;
+  fd_to_file[1].tid = 0;
   
   fd_to_file[2].fd = 2;
   fd_to_file[2].file = NULL;
   fd_to_file[2].active = true;
+  fd_to_file[2].tid = 0;
   
   for (int index = 3; index < 1024; index ++)
     {
       fd_to_file[index].fd = index;
       fd_to_file[index].file = NULL;
       fd_to_file[index].active = false;
+      fd_to_file[index].tid = 0;
     }
 }
 
@@ -371,6 +376,12 @@ sys_close(int fd)
   struct file *file = fd_to_file[fd].file;
   if (file == NULL)
     sys_exit (-1);
+  /* Checks if the file descriptor it is closing belong to the
+   * current process */
+  struct thread *cur = thread_current ();
+  if (cur->tid != fd_to_file[fd].tid)
+    return;
+  
   file_close (fd_to_file[fd].file);
   fd_to_file[fd].file = NULL;
   if (fd != 0 && fd != 1 && fd != 2)
@@ -395,6 +406,8 @@ set_next_fd (struct file *file)
         {
           fd_to_file[index].file = file;
           fd_to_file[index].active = true;
+          struct thread *cur = thread_current ();
+          fd_to_file[index].tid = cur->tid;
           return fd_to_file[index].fd;
         }
     }
