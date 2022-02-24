@@ -15,6 +15,7 @@
 #include <threads/vaddr.h>
 #include <userprog/pagedir.h>
 #include <lib/string.h>
+#include <threads/synch.h>
 
 static void syscall_handler (struct intr_frame *);
 
@@ -44,6 +45,7 @@ struct fd_to_file {
 };
 
 static struct fd_to_file fd_to_file[1024];
+struct lock filesys_lock;
 
 // DON'T REMOVE UNTIL DONE
 // 1. static array of struct pointers [1024] for file descriptors
@@ -84,6 +86,7 @@ syscall_init (void)
       fd_to_file[index].active = false;
       fd_to_file[index].tid = 0;
     }
+  lock_init (&filesys_lock);
 }
 
 static void
@@ -278,36 +281,52 @@ sys_wait(uint32_t pid)
 static bool
 sys_create(const char *file, unsigned initial_size)
 {
-  return filesys_create (file, initial_size);
+  lock_acquire (&filesys_lock);
+  bool val = filesys_create (file, initial_size);
+  lock_release (&filesys_lock);
+  return val;
 }
 
 /*  */
 static bool
 sys_remove(const char *file)
 {
-  return filesys_remove (file);
+  lock_acquire (&filesys_lock);
+  bool val = filesys_remove (file);
+  lock_release (&filesys_lock);
+  return val;
 }
 
 /*  */
 static int
 sys_open(const char* filename)
 {
+  lock_acquire (&filesys_lock);
   struct file *file = filesys_open (filename);
   if (file == NULL)
     {
+      lock_release (&filesys_lock);
       return -1;
     }
-  return set_next_fd (file, filename);
+  int fd = set_next_fd (file, filename);
+  lock_release (&filesys_lock);
+  return fd;
 }
 
 /*  */
 static int
 sys_filesize(int fd)
 {
+  lock_acquire (&filesys_lock);
   struct file *file = get_file_from_fd (fd);
   if (file == NULL)
-    sys_exit (-1);
-  return (int)file_length(file);
+    {
+      lock_release (&filesys_lock);
+      sys_exit (-1);
+    }
+  int size = (int)file_length(file);
+  lock_release (&filesys_lock);
+  return size;
 }
 
 /*  */
@@ -324,10 +343,16 @@ sys_read(int fd, void *buffer, unsigned size)
     }
   else
     {
+      lock_acquire (&filesys_lock);
       struct file *file = get_file_from_fd (fd);
       if (file == NULL)
-        sys_exit (-1);
-      return (int)file_read (file, buffer, size);
+        {
+          lock_release (&filesys_lock);
+          sys_exit (-1);
+        }
+      int fsize = file_read (file, buffer, size);
+      lock_release (&filesys_lock);
+      return fsize;
     }
   return 0;
 }
@@ -342,10 +367,16 @@ sys_write(int fd, const void *buffer, unsigned size)
     }
   else
     {
+      lock_acquire (&filesys_lock);
       struct file *file = get_file_from_fd (fd);
       if (file == NULL)
-        sys_exit (-1);
-      return (int)file_write (file, buffer, size);
+        {
+          lock_release (&filesys_lock);
+          sys_exit (-1);
+        }
+      int fsize = file_write (file, buffer, size);
+      lock_release (&filesys_lock);
+      return fsize;
     }
   return 0;
 }
@@ -354,34 +385,52 @@ sys_write(int fd, const void *buffer, unsigned size)
 static void
 sys_seek(int fd, unsigned position)
 {
+  lock_acquire (&filesys_lock);
   struct file *file = get_file_from_fd (fd);
   if (file == NULL)
-    sys_exit (-1);
+    {
+      lock_release (&filesys_lock);
+      sys_exit (-1);
+    }
   file_seek (file, position);
+  lock_release (&filesys_lock);
 }
 
 /*  */
 static unsigned
 sys_tell(int fd)
 {
+  lock_acquire (&filesys_lock);
   struct file *file = get_file_from_fd (fd);
   if (file == NULL)
-    sys_exit (-1);
-  return (unsigned)file_tell (file);
+    {
+      lock_release (&filesys_lock);
+      sys_exit (-1);
+    }
+  int position = (unsigned)file_tell (file);
+  lock_release (&filesys_lock);
+  return position;
 }
 
 /*  */
 static void
 sys_close(int fd)
 {
+  lock_acquire (&filesys_lock);
   struct file *file = fd_to_file[fd].file;
   if (file == NULL)
-    sys_exit (-1);
+    {
+      lock_release (&filesys_lock);
+      sys_exit (-1);
+    }
   /* Checks if the file descriptor it is closing belong to the
    * current process */
   struct thread *cur = thread_current ();
   if (cur->tid != fd_to_file[fd].tid)
-    return;
+    {
+      lock_release (&filesys_lock);
+      return;
+    }
   
   file_close (fd_to_file[fd].file);
   fd_to_file[fd].file = NULL;
@@ -389,6 +438,7 @@ sys_close(int fd)
     {
       fd_to_file[fd].active = false;
     }
+  lock_release (&filesys_lock);
 }
 
 /*  */
