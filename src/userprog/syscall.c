@@ -335,11 +335,13 @@ sys_read(int fd, void *buffer, unsigned size)
 {
   if (fd == 0) /* reading from stdin */
     {
+      lock_acquire (&filesys_lock);
       char *buf = buffer;
       for (unsigned int index = 0; index < size; index ++)
         {
           buf[index] = input_getc ();
         }
+      lock_release (&filesys_lock);
     }
   else
     {
@@ -363,7 +365,9 @@ sys_write(int fd, const void *buffer, unsigned size)
 {
   if (fd == 1) /* writing to stdout */
     {
+      lock_acquire (&filesys_lock);
       putbuf (buffer, size);
+      lock_release (&filesys_lock);
     }
   else
     {
