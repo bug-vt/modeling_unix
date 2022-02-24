@@ -408,6 +408,12 @@ set_next_fd (struct file *file)
           fd_to_file[index].active = true;
           struct thread *cur = thread_current ();
           fd_to_file[index].tid = cur->tid;
+
+          /* Check if it executable */
+          int buf;
+          file_read_at (file, &buf, 4, 0);
+          if (0x464c457f == buf)
+            file_deny_write (file);
           return fd_to_file[index].fd;
         }
     }
