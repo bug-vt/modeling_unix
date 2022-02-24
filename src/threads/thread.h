@@ -31,6 +31,7 @@ struct process {
   tid_t parent_tid;        /*  */
   tid_t self_tid;          /*  */
   struct semaphore sema;   /*  */
+  struct semaphore exit;   /*  */
   int reference_counter;   /*  */
   struct spinlock lock;    /*  */
   int status;              /*  */

@@ -83,6 +83,7 @@ process_execute (const char *line)
     proc->parent_tid = curr->tid;
     proc->reference_counter = 1;
     sema_init (&proc->sema, 0);
+    sema_init (&proc->exit, 0);
     spinlock_init (&proc->lock);
     if (tid == TID_ERROR)
       { 
@@ -90,6 +91,8 @@ process_execute (const char *line)
         free (proc);
       } 
     process_list[index] = proc;
+    if (tid > 1)
+      sema_down (&proc->exit);
     return proc->self_tid; 
 } 
 
@@ -127,9 +130,16 @@ start_process (void *file_name_)
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
-  if (!success) 
-    thread_exit ();
-
+  struct thread *cur = thread_current ();
+  int index = get_process_from_tid (cur->tid);
+  struct process *proc = process_list[index];
+  if (!success)
+    {
+      proc->self_tid = -1;
+      sema_up (&proc->exit);
+      thread_exit ();
+    }
+  sema_up (&proc->exit);
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
