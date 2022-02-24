@@ -61,13 +61,16 @@ process_execute (const char *line)
         fname = strtok_r (NULL, " ", &save_ptr))     
       {
         break;   
-      } 
+      }
+    lock_acquire (&filesys_lock);
     struct file *file = filesys_open (fname);
     if (file == NULL) 
       {
+        lock_release (&filesys_lock);
         return -1;
       }
     file_close (file);
+    lock_release (&filesys_lock);
 
     tid = thread_create (fname, NICE_DEFAULT, start_process, line_copy); 
     int index = get_next_avail_process_index ();
@@ -335,10 +338,12 @@ load (const char *file_name, void (**eip) (void), void **esp)
   process_activate ();
 
   /* Open executable file. */
+  lock_acquire (&filesys_lock);
   file = filesys_open (file_name);
   if (file == NULL) 
     {
       printf ("load: %s: open failed\n", file_name);
+      lock_release (&filesys_lock);
       goto done; 
     }
 
@@ -426,6 +431,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
  done:
   /* We arrive here whether the load is successful or not. */
   file_close (file);
+  lock_release (&filesys_lock);
   return success;
 }
 

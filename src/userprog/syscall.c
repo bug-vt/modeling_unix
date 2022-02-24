@@ -45,7 +45,6 @@ struct fd_to_file {
 };
 
 static struct fd_to_file fd_to_file[1024];
-struct lock filesys_lock;
 
 // DON'T REMOVE UNTIL DONE
 // 1. static array of struct pointers [1024] for file descriptors
