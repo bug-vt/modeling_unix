@@ -2,8 +2,8 @@
 #include <stdio.h>
 // #include <unistd.h>
 #include <syscall-nr.h>
-#include "threads/interrupt.h"
-#include "threads/thread.h"
+#include <threads/interrupt.h>
+#include <threads/thread.h>
 #include <filesys/file.h>
 #include <filesys/filesys.h>
 #include <filesys/inode.h>
@@ -13,7 +13,7 @@
 #include <devices/shutdown.h>
 
 #include <threads/vaddr.h>
-#include "userprog/pagedir.h"
+#include <userprog/pagedir.h>
 
 static void syscall_handler (struct intr_frame *);
 
@@ -299,6 +299,8 @@ static int
 sys_filesize(int fd)
 {
   struct file *file = get_file_from_fd (fd);
+  if (file == NULL)
+    sys_exit (-1);
   return (int)file_length(file);
 }
 
@@ -317,6 +319,8 @@ sys_read(int fd, void *buffer, unsigned size)
   else
     {
       struct file *file = get_file_from_fd (fd);
+      if (file == NULL)
+        sys_exit (-1);
       return (int)file_read (file, buffer, size);
     }
   return 0;
@@ -333,6 +337,8 @@ sys_write(int fd, const void *buffer, unsigned size)
   else
     {
       struct file *file = get_file_from_fd (fd);
+      if (file == NULL)
+        sys_exit (-1);
       return (int)file_write (file, buffer, size);
     }
   return 0;
@@ -343,6 +349,8 @@ static void
 sys_seek(int fd, unsigned position)
 {
   struct file *file = get_file_from_fd (fd);
+  if (file == NULL)
+    sys_exit (-1);
   file_seek (file, position);
 }
 
@@ -351,6 +359,8 @@ static unsigned
 sys_tell(int fd)
 {
   struct file *file = get_file_from_fd (fd);
+  if (file == NULL)
+    sys_exit (-1);
   return (unsigned)file_tell (file);
 }
 
@@ -358,6 +368,9 @@ sys_tell(int fd)
 static void
 sys_close(int fd)
 {
+  struct file *file = fd_to_file[fd].file;
+  if (file == NULL)
+    sys_exit (-1);
   file_close (fd_to_file[fd].file);
   fd_to_file[fd].file = NULL;
   if (fd != 0 && fd != 1 && fd != 2)
