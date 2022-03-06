@@ -52,16 +52,13 @@ process_execute (const char *line)
         return TID_ERROR;   
     strlcpy (line_copy, line, PGSIZE);   
 
-    /* Create a new thread to execute FILE_NAME. */  
     size_t size = strlen(line_copy) + 1;
     char temp[size];
     strlcpy(temp, line_copy, size);
+    /* Extract executable file name from raw input line. */
     char *fname, *save_ptr;   
-    for (fname = strtok_r (temp, " ", &save_ptr); fname != NULL; 
-        fname = strtok_r (NULL, " ", &save_ptr))     
-      {
-        break;   
-      }
+    fname = strtok_r (temp, " ", &save_ptr);
+
     lock_acquire (&filesys_lock);
     struct file *file = filesys_open (fname);
     if (file == NULL) 
@@ -72,6 +69,7 @@ process_execute (const char *line)
     file_close (file);
     lock_release (&filesys_lock);
 
+    /* Create a new thread to execute executable file. */  
     tid = thread_create (fname, NICE_DEFAULT, start_process, line_copy); 
     int index = get_next_avail_process_index ();
     if (index == -1)
@@ -88,6 +86,7 @@ process_execute (const char *line)
     sema_init (&proc->sema, 0);
     sema_init (&proc->exit, 0);
     spinlock_init (&proc->lock);
+
     if (tid == TID_ERROR)
       { 
         palloc_free_page (line_copy); 
@@ -170,13 +169,6 @@ process_wait (tid_t child_tid)
   struct process *proc = process_list[index];
   if (proc->parent_tid != curr->tid)
     return -1;
-
-  spinlock_acquire (&proc->lock);
-  if (proc->reference_counter <= 0)
-    {
-      return -1;
-    }
-  spinlock_release (&proc->lock);
 
   sema_down (&proc->sema);
   spinlock_acquire (&proc->lock);
