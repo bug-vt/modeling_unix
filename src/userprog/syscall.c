@@ -39,9 +39,7 @@ static void validate_fd (int fd, int syscall);
 
 /* Struct that maps a file to a file descriptor */
 struct fd_to_file {
-  int fd;               /* File descriptor */
   struct file * file;   /* File */
-  bool active;          /* Checks if current file descriptor map is active */
   int tid;              /* The tid of the associated file descriptor */
 };
 
@@ -52,27 +50,11 @@ void
 syscall_init (void) 
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
-  fd_to_file[0].fd = 0;
-  fd_to_file[0].file = NULL;
-  fd_to_file[0].active = true;
-  fd_to_file[0].tid = 0;
-
-  fd_to_file[1].fd = 1;
-  fd_to_file[1].file = NULL;
-  fd_to_file[1].active = true;
-  fd_to_file[1].tid = 0;
   
-  fd_to_file[2].fd = 2;
-  fd_to_file[2].file = NULL;
-  fd_to_file[2].active = true;
-  fd_to_file[2].tid = 0;
-  
-  for (int index = 3; index < 1024; index ++)
+  for (int fd = 0; fd < 1024; fd ++)
     {
-      fd_to_file[index].fd = index;
-      fd_to_file[index].file = NULL;
-      fd_to_file[index].active = false;
-      fd_to_file[index].tid = 0;
+      fd_to_file[fd].file = NULL;
+      fd_to_file[fd].tid = 0;
     }
   lock_init (&filesys_lock);
 }
@@ -412,10 +394,6 @@ sys_close(int fd)
   
   file_close (fd_to_file[fd].file);
   fd_to_file[fd].file = NULL;
-  if (fd != 0 && fd != 1 && fd != 2)
-    {
-      fd_to_file[fd].active = false;
-    }
   lock_release (&filesys_lock);
 }
 
@@ -432,19 +410,18 @@ get_file_from_fd (int fd)
 static int
 set_next_fd (struct file *file, const char *filename)
 {
-  for (int index = 3; index < 1024; index ++)
+  for (int fd = 3; fd < 1024; fd ++)
     {
-      if (!fd_to_file[index].active)
+      if (fd_to_file[fd].file == NULL)
         {
-          fd_to_file[index].file = file;
-          fd_to_file[index].active = true;
+          fd_to_file[fd].file = file;
           struct thread *cur = thread_current ();
-          fd_to_file[index].tid = cur->tid;
+          fd_to_file[fd].tid = cur->tid;
 
           /* Check if it is a running executable */
           if (strcmp (filename, cur->name) == 0)
             file_deny_write (file);
-          return fd_to_file[index].fd;
+          return fd;
         }
     }
   return -1;
