@@ -37,6 +37,11 @@ struct process {
   int status;              /* Holds the status of the child process */
 };
 
+/* Struct that contains the table of fd mappings */
+struct fd_table {
+  struct file *fd_to_file[1024]; /* Array that stores the file descriptor mappings */
+};
+
 /* A kernel thread or user process.
 
    Each thread structure is stored in its own 4 kB page.  The
@@ -124,6 +129,9 @@ struct thread
   /* CPU consumption */
   int64_t timer_start; /* The start of CPU consumption */
   int64_t timer_stop; /* The end of CPU consumption */
+
+  /* fd mappings table */
+  struct fd_table *fd_table;
 
   /* Owned by thread.c. */
   unsigned magic; /* Detects stack overflow. */

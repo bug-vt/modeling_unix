@@ -192,8 +192,8 @@ process_exit (void)
   struct process *proc = process_list[index];
   int status = proc->status;
   printf("%s: exit(%d)\n", cur->name, status);
-  sema_up (&proc->sema);
   /* Frees any process entries where the current process is the parent */
+  /* Also closes file descriptors */
   for (int index = 0; index < 1024; index ++)
     {
       if (process_list[index] != NULL)
@@ -205,7 +205,14 @@ process_exit (void)
               process_list[index] = NULL;
             }
         }
+      if (cur->fd_table->fd_to_file[index] != NULL)
+        {
+          file_close (cur->fd_table->fd_to_file[index]);
+          cur->fd_table->fd_to_file[index] = NULL;
+        }
     }
+  palloc_free_page (cur->fd_table);
+  sema_up (&proc->sema);
   uint32_t *pd;
 
   /* Destroy the current process's page directory and switch back
@@ -596,6 +603,7 @@ setup_args(const char *line, void **esp)
     {
       array_size++;   
     }
+    
 
   char ** argv = calloc(array_size, sizeof(char*));
   int pos = 0;   

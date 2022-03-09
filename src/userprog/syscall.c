@@ -37,25 +37,10 @@ static struct file *get_file_from_fd (int fd);
 static int set_next_fd (struct file *file, const char *filename);
 static void validate_fd (int fd, int syscall);
 
-/* Struct that maps a file to a file descriptor */
-struct fd_to_file {
-  struct file * file;   /* File */
-  int tid;              /* The tid of the associated file descriptor */
-};
-
-/* Array that stores the file descriptor mappings */
-static struct fd_to_file fd_to_file[1024];
-
 void
 syscall_init (void) 
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
-  
-  for (int fd = 0; fd < 1024; fd ++)
-    {
-      fd_to_file[fd].file = NULL;
-      fd_to_file[fd].tid = 0;
-    }
   lock_init (&filesys_lock);
 }
 
@@ -376,24 +361,17 @@ sys_tell(int fd)
 static void
 sys_close(int fd)
 {
+  struct thread *cur = thread_current ();
   lock_acquire (&filesys_lock);
-  struct file *file = fd_to_file[fd].file;
+  struct file *file = cur->fd_table->fd_to_file[fd];
   if (file == NULL)
     {
       lock_release (&filesys_lock);
       sys_exit (-1);
     }
-  /* Checks if the file descriptor it is closing belong to the
-   * current process */
-  struct thread *cur = thread_current ();
-  if (cur->tid != fd_to_file[fd].tid)
-    {
-      lock_release (&filesys_lock);
-      return;
-    }
   
-  file_close (fd_to_file[fd].file);
-  fd_to_file[fd].file = NULL;
+  file_close (cur->fd_table->fd_to_file[fd]);
+  cur->fd_table->fd_to_file[fd] = NULL;
   lock_release (&filesys_lock);
 }
 
@@ -401,7 +379,8 @@ sys_close(int fd)
 static struct file *
 get_file_from_fd (int fd)
 {
-  return fd_to_file[fd].file;
+  struct thread *cur = thread_current ();
+  return cur->fd_table->fd_to_file[fd];
 }
 
 /* Finds the next available file descriptor mapping and
@@ -410,13 +389,12 @@ get_file_from_fd (int fd)
 static int
 set_next_fd (struct file *file, const char *filename)
 {
+  struct thread *cur = thread_current ();
   for (int fd = 3; fd < 1024; fd ++)
     {
-      if (fd_to_file[fd].file == NULL)
+      if (cur->fd_table->fd_to_file[fd] == NULL)
         {
-          fd_to_file[fd].file = file;
-          struct thread *cur = thread_current ();
-          fd_to_file[fd].tid = cur->tid;
+          cur->fd_table->fd_to_file[fd] = file;
 
           /* Check if it is a running executable */
           if (strcmp (filename, cur->name) == 0)

@@ -244,6 +244,11 @@ thread_create (const char *name, int nice, thread_func *function, void *aux)
   if (t == NULL)
     return TID_ERROR;
 
+  struct fd_table *fd_table = palloc_get_page (PAL_ZERO);
+  if (fd_table == NULL)
+    return TID_ERROR;
+
+  t->fd_table = fd_table;
   /* Must save tid here - 't' could already be freed when we return 
      from wake_up_new_thread */ 
   tid_t tid = t->tid;
