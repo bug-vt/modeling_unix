@@ -25,22 +25,19 @@
 #include <threads/spinlock.h>
 #include <userprog/syscall.h>
 
-static struct process *process_list[1024];
-
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 /* Our Code */
 static int setup_args (const char *str, void **esp);
-static int get_next_avail_process_index (void);
-static int get_process_from_tid (tid_t child_tid);
+static struct maternal_bond * find_child (tid_t child_tid);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
-  thread id, or TID_ERROR if the thread cannot be created. */
+   thread id, or TID_ERROR if the thread cannot be created. */
 
 tid_t 
-process_execute (const char *line) 
+process_execute (const char *cmd_line) 
 {   
     char *line_copy;   
     tid_t tid;   
@@ -50,52 +47,35 @@ process_execute (const char *line)
     line_copy = palloc_get_page (0);   
     if (line_copy == NULL)     
         return TID_ERROR;   
-    strlcpy (line_copy, line, PGSIZE);   
+    strlcpy (line_copy, cmd_line, PGSIZE);   
 
-    size_t size = strlen(line_copy) + 1;
-    char temp[size];
-    strlcpy(temp, line_copy, size);
     /* Extract executable file name from raw input line. */
     char *fname, *save_ptr;   
-    fname = strtok_r (temp, " ", &save_ptr);
-
-    lock_acquire (&filesys_lock);
-    struct file *file = filesys_open (fname);
-    if (file == NULL) 
-      {
-        lock_release (&filesys_lock);
-        return -1;
-      }
-    file_close (file);
-    lock_release (&filesys_lock);
+    fname = strtok_r ((char *) cmd_line, " ", &save_ptr);
 
     /* Create a new thread to execute executable file. */  
     tid = thread_create (fname, NICE_DEFAULT, start_process, line_copy); 
-    int index = get_next_avail_process_index ();
-    if (index == -1)
+    if (tid == TID_ERROR)
       {
         palloc_free_page (line_copy);
-        return tid;
+        goto exec_done;
       }
 
-    struct thread *curr = thread_current ();
-    struct process *proc = calloc(1, sizeof(struct process));
-    proc->self_tid = tid;
-    proc->parent_tid = curr->tid;
-    proc->reference_counter = 1;
-    sema_init (&proc->sema, 0);
-    sema_init (&proc->exit, 0);
-    spinlock_init (&proc->lock);
+    /* Wait for newly created process to finish loading. */
+    struct maternal_bond *bond = find_child (tid);
+    sema_down (&bond->load);
+    /* Load error */
+    if (bond->load_fail)
+      {
+        /* Wait for the child process to completely exit. */
+        sema_down (&bond->exit);
+        list_remove (&bond->elem);
+        free (bond);
+        tid = TID_ERROR;
+      }
 
-    if (tid == TID_ERROR)
-      { 
-        palloc_free_page (line_copy); 
-        free (proc);
-      } 
-    process_list[index] = proc;
-    if (tid > 1)
-      sema_down (&proc->exit);
-    return proc->self_tid; 
+exec_done:
+    return tid; 
 } 
 
 /* A thread function that loads a user process and starts it
@@ -114,31 +94,17 @@ start_process (void *file_name_)
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
 
-  size_t size = strlen(file_name_) + 1;
-  char temp[size];
-  strlcpy(temp, file_name_, size);
-  char *token, *save_ptr;   
-  for (token = strtok_r (temp, " ", &save_ptr); token != NULL; 
-      token = strtok_r (NULL, " ", &save_ptr))     
-    {
-      break;   
-    } 
+  lock_acquire (&filesys_lock);
+  success = load (file_name, &if_.eip, &if_.esp);
+  lock_release (&filesys_lock);
 
-  success = load (token, &if_.eip, &if_.esp);
   setup_args (file_name, &if_.esp);
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
-  struct thread *cur = thread_current ();
-  int index = get_process_from_tid (cur->tid);
-  struct process *proc = process_list[index];
   if (!success)
-    {
-      proc->self_tid = -1;
-      sema_up (&proc->exit);
-      thread_exit ();
-    }
-  sema_up (&proc->exit);
+    sys_exit (-1);
+
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
@@ -161,23 +127,28 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid) 
 {
-  struct thread *curr = thread_current ();
-  int index = get_process_from_tid (child_tid);
-  if (index == -1)
+  struct maternal_bond *bond = find_child (child_tid);
+  /* The parent does not have a child with given tid. */
+  if (!bond)
     return -1;
 
-  struct process *proc = process_list[index];
-  if (proc->parent_tid != curr->tid)
-    return -1;
+  /* Wait for the child to exit. */
+  sema_down (&bond->exit);
+  /* Remove the child from the children list. */ 
+  list_remove (&bond->elem);
+  /* At this point, child have exited and must be zombie.
+     Reap the child. */
+  bool reap = false;
+  spinlock_acquire (&bond->lock);
+  int status = bond->status;
+  bond->reference_counter--;
+  if (bond->reference_counter == 0)
+    reap = true;
+  spinlock_release (&bond->lock);
 
-  sema_down (&proc->sema);
-  spinlock_acquire (&proc->lock);
-  proc->reference_counter --;
-  int status = proc->status;
-  spinlock_release (&proc->lock);
+  if (reap)
+    free (bond);
   
-  free (proc);
-  process_list[index] = NULL;
   return status;
 }
 
@@ -186,35 +157,7 @@ void
 process_exit (void)
 {
   struct thread *cur = thread_current ();
-  int index = get_process_from_tid (cur->tid);
-  if (index == -1)
-    return;
-  struct process *proc = process_list[index];
-  int status = proc->status;
-  printf("%s: exit(%d)\n", cur->name, status);
-  /* Frees any process entries where the current process is the parent */
-  /* Also closes file descriptors */
-  for (int index = 0; index < 1024; index ++)
-    {
-      if (process_list[index] != NULL)
-        {
-          if (process_list[index]->parent_tid == cur->tid)
-            {
-              struct process *proc = process_list[index];
-              free (proc);
-              process_list[index] = NULL;
-            }
-        }
-      if (cur->fd_table->fd_to_file[index] != NULL)
-        {
-          file_close (cur->fd_table->fd_to_file[index]);
-          cur->fd_table->fd_to_file[index] = NULL;
-        }
-    }
-  palloc_free_page (cur->fd_table);
-  sema_up (&proc->sema);
   uint32_t *pd;
-
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
@@ -231,6 +174,58 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+
+  /* Print termination message. */
+  int status = cur->bond->status;
+  printf("%s: exit(%d)\n", cur->name, status);
+
+  /* Closes all open file descriptors and free the fd table. */
+  for (int fd = 2; fd < 1024; fd++)
+    {
+      if (cur->fd_table->fd_to_file[fd] != NULL)
+        {
+          file_close (cur->fd_table->fd_to_file[fd]);
+        }
+    }
+  palloc_free_page (cur->fd_table);
+
+  /* Close the executable that was running on exiting process.
+     This re-enable the write permission. */
+  lock_acquire (&filesys_lock);
+  file_close (cur->file);
+  lock_release (&filesys_lock);
+
+  /* Remove children list and reap zombie children if any. */
+  for (struct list_elem *e = list_begin (&cur->children);
+       e != list_end (&cur->children);)
+    {
+      struct maternal_bond *bond = list_entry (e, struct maternal_bond, elem);
+
+      bool reap = false;
+      spinlock_acquire (&bond->lock);
+      bond->reference_counter--;
+      if (bond->reference_counter == 0)
+        reap = true;
+      spinlock_release (&bond->lock);
+
+      e = list_remove (e);
+      if (reap)
+        free (bond);
+    }
+
+  /* Break the bond between the current process and its parent
+     by decrementing the reference counter. */
+  bool reap = false;
+  spinlock_acquire (&cur->bond->lock);
+  cur->bond->reference_counter--;
+  if (cur->bond->reference_counter == 0)
+    reap = true;
+  spinlock_release (&cur->bond->lock);
+
+  /* Notify the parent of the current process that it has been exited. */
+  sema_up (&cur->bond->exit);
+  if (reap)
+    free (cur->bond);
 }
 
 /* Sets up the CPU for running user code in the current
@@ -339,14 +334,17 @@ load (const char *file_name, void (**eip) (void), void **esp)
   process_activate ();
 
   /* Open executable file. */
-  lock_acquire (&filesys_lock);
-  file = filesys_open (file_name);
+  /* Note that t->name stores executable file name without arguments. */
+  file = filesys_open (t->name);
   if (file == NULL) 
     {
-      printf ("load: %s: open failed\n", file_name);
-      lock_release (&filesys_lock);
+      printf ("load: %s: open failed\n", t->name);
       goto done; 
     }
+
+  /* Disable write permission to the currently running executable. 
+     This will be re-enable once process exit. */
+  file_deny_write (file);
 
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
@@ -428,11 +426,14 @@ load (const char *file_name, void (**eip) (void), void **esp)
   *eip = (void (*) (void)) ehdr.e_entry;
 
   success = true;
+  t->bond->load_fail = false;
 
  done:
   /* We arrive here whether the load is successful or not. */
-  file_close (file);
-  lock_release (&filesys_lock);
+  /* Record executable file that was loaded to the process */
+  t->file = file;
+  /* Notify the parent that load was completed (or failed). */
+  sema_up (&t->bond->load);
   return success;
 }
 
@@ -564,6 +565,7 @@ setup_stack (void **esp)
   return success;
 }
 
+
 /* Adds a mapping from user virtual address UPAGE to kernel
    virtual address KPAGE to the page table.
    If WRITABLE is true, the user process may modify the page;
@@ -663,44 +665,19 @@ setup_args(const char *line, void **esp)
   return offset;
 }
 
-/* Gets the next available index in the
- * process array */
-static int
-get_next_avail_process_index (void)
+/* Find the share data (bond) between the current process
+   and one of its child from the children list using the given tid. */
+static struct maternal_bond *
+find_child (tid_t child_tid)
 {
-  for (int index = 0; index < 1024; index ++)
+  struct thread *curr = thread_current ();
+  for (struct list_elem *e = list_begin (&curr->children);
+       e != list_end (&curr->children); e = list_next (e))
     {
-      if (process_list[index] == NULL)
-        {
-          return index;
-        }
+      struct maternal_bond *bond = list_entry (e, struct maternal_bond, elem);
+      if (bond->tid == child_tid)
+        return bond;
     }
-  return -1;
-}
 
-/* Gets an index for the process array from
- * a tid */
-static int
-get_process_from_tid (tid_t child_tid)
-{
-  for (int index = 0; index < 1024; index ++)
-    {
-      if (process_list[index] != NULL)
-        {
-          if (process_list[index]->self_tid == child_tid)
-            return index;
-        }
-    }
-  return -1;
-}
-
-/* Sets the status of the process for when the
- * child exits */
-void 
-set_status (int status)
-{
-  struct thread *cur = thread_current ();
-  int index = get_process_from_tid (cur->tid);
-  struct process * proc = process_list[index];
-  proc->status = status;
+  return NULL;
 }

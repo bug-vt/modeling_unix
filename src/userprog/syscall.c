@@ -16,6 +16,7 @@
 #include <userprog/pagedir.h>
 #include <lib/string.h>
 #include <threads/synch.h>
+#include "threads/palloc.h"
 
 static void syscall_handler (struct intr_frame *);
 
@@ -68,9 +69,17 @@ syscall_handler (struct intr_frame *f)
         }
       case SYS_EXEC:
         {
-          const char *cmd_line = (char *)us[1];
-          validate_ptr ((void *)cmd_line);
-          f->eax = (uint32_t)sys_exec (cmd_line);
+          validate_ptr ((void *) us[1]);
+          /* Temporary fix to allocate and copy cmd_line to kernel heap. */
+          char *cmd_line = palloc_get_page (0);   
+          if (cmd_line == NULL)
+            {
+              f->eax = TID_ERROR;
+              break;
+            }
+          strlcpy (cmd_line, (char *) us[1], PGSIZE);   
+          f->eax = (uint32_t) sys_exec (cmd_line);
+          palloc_free_page (cmd_line);
           break;
         }
       case SYS_WAIT:
@@ -160,7 +169,7 @@ syscall_handler (struct intr_frame *f)
 void
 validate_ptr(const void *addr)
 {
-  if (addr >=  PHYS_BASE || addr < (void*) 0x8048000)
+  if (!is_user_vaddr (addr))
     {
       sys_exit (-1);
     }
@@ -200,7 +209,8 @@ sys_halt(void)
 void
 sys_exit(int status)
 {
-  set_status (status);
+  struct thread *current = thread_current ();
+  current->bond->status = status;
   thread_exit ();
 }
 

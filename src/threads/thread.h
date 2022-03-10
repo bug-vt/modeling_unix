@@ -26,15 +26,23 @@ typedef int tid_t;
 #define NICE_DEFAULT 0                  /* Default priority. */
 #define NICE_MAX 19                     /* Lowest priority. */
 
-/* Process */
-struct process {
-  tid_t parent_tid;        /* Parent tid of the process */
-  tid_t self_tid;          /* The current tid of the process */
-  struct semaphore sema;   /* The semaphore that's used for waiting */
-  struct semaphore exit;   /* The semaphore that's used for checking errors and exiting */
-  int reference_counter;   /* Stores the amount of threads connected to this struct */
-  struct spinlock lock;    /* The spinlock that protects the field above */
-  int status;              /* Holds the status of the child process */
+/* Share data between the parent and the child process. */
+struct maternal_bond {
+  struct list_elem elem;   /* List element for children list. */
+  tid_t tid;               /* The tid of the child process */
+  struct semaphore load;   /* The semaphore that's used for loading. */
+  struct semaphore exit;   /* The semaphore that's used for exiting */
+  int reference_counter;   /* This describe the bond relationship
+                              between the parent and the child:
+                              2 = both parent and child are alive.
+                              1 = The current process is either zombie
+                                  or orphan.
+                              0 = both parent and the child are dead. */
+  struct spinlock lock;    /* The spinlock that protects the 
+                              reference counter */
+  int status;              /* Holds the exit status of the child process */
+  bool load_fail;          /* Indication for load failure during
+                              process start-up. */
 };
 
 /* Struct that contains the table of fd mappings */
@@ -104,7 +112,8 @@ struct thread
   /* Owned by thread.c. */
   tid_t tid; /* Thread identifier. */
   enum thread_status status; /* Thread state. */
-  char name[THREAD_NAME_MAX]; /* Name (for debugging purposes). */
+  char name[THREAD_NAME_MAX]; /* For thread: Name (for debugging purposes). 
+                                 For process: Executable name w/o arguments. */
   uint8_t *stack; /* Saved stack pointer. */
   int nice; /* Nice value. */
   struct list_elem allelem; /* List element for all threads list. */
@@ -130,8 +139,15 @@ struct thread
   int64_t timer_start; /* The start of CPU consumption */
   int64_t timer_stop; /* The end of CPU consumption */
 
-  /* fd mappings table */
-  struct fd_table *fd_table;
+  /* Used for process.c */
+  struct maternal_bond *bond; /* shared data between current process
+                                 and its parent process. */
+  struct list children; /* List of bond between current process and
+                           its children. */
+  struct file *file; /* Executable file that the current process 
+                        is executing. */
+  /* Used for syscall.c */
+  struct fd_table *fd_table; /* file descriptor table */
 
   /* Owned by thread.c. */
   unsigned magic; /* Detects stack overflow. */

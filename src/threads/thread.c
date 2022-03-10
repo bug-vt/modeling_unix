@@ -240,14 +240,45 @@ thread_create (const char *name, int nice, thread_func *function, void *aux)
 {
   struct thread *t;
 
-  t = do_thread_create(name, nice, function, aux);
-  if (t == NULL)
+  /* Allocate memory for bond,
+     which will be used for sharing data between
+     the newly created process and its parent. */
+  struct maternal_bond *bond = malloc (sizeof (struct maternal_bond));
+  if (bond == NULL)
     return TID_ERROR;
 
+  /* Allocate memory for file descriptor table,
+     which keep track of all the open files that 
+     are associate with each process. */
   struct fd_table *fd_table = palloc_get_page (PAL_ZERO);
   if (fd_table == NULL)
-    return TID_ERROR;
+    {
+      free (bond);
+      return TID_ERROR;
+    }
 
+  t = do_thread_create(name, nice, function, aux);
+  if (t == NULL)
+    {
+      free (bond);
+      palloc_free_page (fd_table);
+      return TID_ERROR;
+    }
+
+  /* Initialize bond and assign parent by
+     inserting into parent's children list */
+  bond->tid = t->tid;
+  bond->status = 0;
+  bond->load_fail = true;
+  bond->reference_counter = 2;
+  sema_init (&bond->load, 0);
+  sema_init (&bond->exit, 0);
+  spinlock_init (&bond->lock);
+
+  t->bond = bond;
+  list_push_front (&thread_current ()->children, &t->bond->elem);
+
+  /* Attach empty file descriptor table to the new process. */
   t->fd_table = fd_table;
   /* Must save tid here - 't' could already be freed when we return 
      from wake_up_new_thread */ 
@@ -693,10 +724,11 @@ init_thread (struct thread *t, const char *name, int nice)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->nice = nice;
-  t->magic = THREAD_MAGIC;
   t->vruntime = 0;
   t->timer_start = 0;
   t->timer_stop = 0;
+  list_init (&t->children);
+  t->magic = THREAD_MAGIC;
   if (cpu_can_acquire_spinlock)
     spinlock_acquire (&all_lock);
   list_push_back (&all_list, &t->allelem);
