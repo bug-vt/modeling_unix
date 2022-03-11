@@ -30,7 +30,7 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp);
 /* Our Code */
 static int setup_args (const char *str, void **esp);
 static struct maternal_bond * find_child (tid_t child_tid);
-static bool is_empty_bond (struct maternal_bond *bond);
+static bool is_orphan_or_zombie (struct maternal_bond *bond);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -122,10 +122,7 @@ start_process (void *file_name_)
    exception), returns -1.  If TID is invalid or if it was not a
    child of the calling process, or if process_wait() has already
    been successfully called for the given TID, returns -1
-   immediately, without waiting.
-
-   This function will be implemented in problem 2-2.  For now, it
-   does nothing. */
+   immediately, without waiting. */
 int
 process_wait (tid_t child_tid) 
 {
@@ -138,9 +135,9 @@ process_wait (tid_t child_tid)
   sema_down (&bond->exit);
   /* Remove the child from the children list. */ 
   list_remove (&bond->elem);
-  /* At this point, child have exited and must be zombie.
+  /* At this point, child have exited and must be a zombie.
      Reap the child. */
-  bool reap = is_empty_bond (bond);
+  bool reap = is_orphan_or_zombie (bond);
   int status = bond->status;
 
   if (reap)
@@ -192,14 +189,14 @@ process_exit (void)
   file_close (cur->file);
   lock_release (&filesys_lock);
 
-  /* Remove children list and reap zombie children if any. */
+  /* Remove children list and reap zombie children if any. 
+     Otherwise, make the alive children to orphan. */
   for (struct list_elem *e = list_begin (&cur->children);
        e != list_end (&cur->children);)
     {
       struct maternal_bond *bond = list_entry (e, struct maternal_bond, elem);
 
-      bool reap = is_empty_bond (bond);
-
+      bool reap = is_orphan_or_zombie (bond);
       e = list_remove (e);
       if (reap)
         free (bond);
@@ -207,8 +204,9 @@ process_exit (void)
 
   /* Break the bond between the current process and its parent
      by decrementing the reference counter. 
-     Reap (free resource related to bond) itself if it is orphan. */
-  bool reap = is_empty_bond (cur->bond);
+     If the current process is orphan, then reap itself.
+     Otherwise, become a zombie */
+  bool reap = is_orphan_or_zombie (cur->bond);
 
   /* Notify the parent of the current process that it has been exited. */
   sema_up (&cur->bond->exit);
@@ -672,7 +670,7 @@ find_child (tid_t child_tid)
 
 /* Determine if the share data (bond) should be reaped. */
 static bool
-is_empty_bond (struct maternal_bond *bond)
+is_orphan_or_zombie (struct maternal_bond *bond)
 {
   bool reap = false;
   spinlock_acquire (&bond->lock);
