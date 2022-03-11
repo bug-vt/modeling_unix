@@ -30,6 +30,7 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp);
 /* Our Code */
 static int setup_args (const char *str, void **esp);
 static struct maternal_bond * find_child (tid_t child_tid);
+static bool is_empty_bond (struct maternal_bond *bond);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -98,6 +99,7 @@ start_process (void *file_name_)
   success = load (file_name, &if_.eip, &if_.esp);
   lock_release (&filesys_lock);
 
+  /* Set up user provided arguments to the stack. */
   setup_args (file_name, &if_.esp);
 
   /* If load failed, quit. */
@@ -138,13 +140,8 @@ process_wait (tid_t child_tid)
   list_remove (&bond->elem);
   /* At this point, child have exited and must be zombie.
      Reap the child. */
-  bool reap = false;
-  spinlock_acquire (&bond->lock);
+  bool reap = is_empty_bond (bond);
   int status = bond->status;
-  bond->reference_counter--;
-  if (bond->reference_counter == 0)
-    reap = true;
-  spinlock_release (&bond->lock);
 
   if (reap)
     free (bond);
@@ -201,12 +198,7 @@ process_exit (void)
     {
       struct maternal_bond *bond = list_entry (e, struct maternal_bond, elem);
 
-      bool reap = false;
-      spinlock_acquire (&bond->lock);
-      bond->reference_counter--;
-      if (bond->reference_counter == 0)
-        reap = true;
-      spinlock_release (&bond->lock);
+      bool reap = is_empty_bond (bond);
 
       e = list_remove (e);
       if (reap)
@@ -214,13 +206,9 @@ process_exit (void)
     }
 
   /* Break the bond between the current process and its parent
-     by decrementing the reference counter. */
-  bool reap = false;
-  spinlock_acquire (&cur->bond->lock);
-  cur->bond->reference_counter--;
-  if (cur->bond->reference_counter == 0)
-    reap = true;
-  spinlock_release (&cur->bond->lock);
+     by decrementing the reference counter. 
+     Reap (free resource related to bond) itself if it is orphan. */
+  bool reap = is_empty_bond (cur->bond);
 
   /* Notify the parent of the current process that it has been exited. */
   sema_up (&cur->bond->exit);
@@ -680,4 +668,18 @@ find_child (tid_t child_tid)
     }
 
   return NULL;
+}
+
+/* Determine if the share data (bond) should be reaped. */
+static bool
+is_empty_bond (struct maternal_bond *bond)
+{
+  bool reap = false;
+  spinlock_acquire (&bond->lock);
+  bond->reference_counter--;
+  if (bond->reference_counter == 0)
+    reap = true;
+  spinlock_release (&bond->lock);
+
+  return reap;
 }
