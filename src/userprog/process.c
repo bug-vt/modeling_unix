@@ -183,6 +183,16 @@ process_exit (void)
     }
   palloc_free_page (cur->fd_table);
 
+  /* Closes all open file mappings and free the file mappings table. */
+  for (int index = 0; index < 1024; index ++)
+    {
+      if (cur->file_map_table_ptr->mapids[index] != NULL)
+        {
+          file_close (cur->file_map_table_ptr->mapids[index]->file);
+        }
+    }
+  palloc_free_page (cur->file_map_table_ptr);
+
   /* Close the executable that was running on exiting process.
      This re-enable the write permission. */
   lock_acquire (&filesys_lock);

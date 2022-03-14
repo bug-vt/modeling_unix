@@ -27,7 +27,8 @@ typedef int tid_t;
 #define NICE_MAX 19                     /* Lowest priority. */
 
 /* Share data between the parent and the child process. */
-struct maternal_bond {
+struct maternal_bond 
+{
   struct list_elem elem;   /* List element for children list. */
   tid_t tid;               /* The tid of the child process */
   struct semaphore load;   /* The semaphore that's used for loading. */
@@ -46,8 +47,28 @@ struct maternal_bond {
 };
 
 /* Struct that contains the table of fd mappings */
-struct fd_table {
+struct fd_table 
+{
   struct file *fd_to_file[1024]; /* Array that stores the file descriptor mappings */
+};
+
+/* Struct that contains the information for file mappings with virtual memory */
+struct mapid_to_file
+{
+    void *vaddr;            /* Starting virtual address of the current file mapping */
+
+    /* Used for write back */
+    struct file *file;      /* File that data was read from */
+    size_t size;            /* Length of data that was read into memory from the file */
+};
+
+/* File mapping table.
+    The user process can interact with mmaped files by use of 
+    mapid, which is an index to the table. 
+    NULL if there is no mmaped file for the given index (mapid). */
+struct file_map_table
+{
+    struct mapid_to_file *mapids[1024];
 };
 
 /* A kernel thread or user process.
@@ -148,6 +169,9 @@ struct thread
                         is executing. */
   /* Used for syscall.c */
   struct fd_table *fd_table; /* file descriptor table */
+
+  /* Each process manages its own set of mmaped files. */
+  struct file_map_table *file_map_table_ptr;
 
   /* Owned by thread.c. */
   unsigned magic; /* Detects stack overflow. */
