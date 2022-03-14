@@ -260,6 +260,10 @@ sys_open(const char* filename)
       return -1;
     }
   int fd = set_next_fd (file, filename);
+  if (fd == -1)
+    {
+      file_close (file);
+    }
   lock_release (&filesys_lock);
   return fd;
 }

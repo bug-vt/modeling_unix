@@ -100,11 +100,11 @@ start_process (void *file_name_)
   lock_release (&filesys_lock);
 
   /* Set up user provided arguments to the stack. */
-  setup_args (file_name, &if_.esp);
+  int args_val = setup_args (file_name, &if_.esp);
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
-  if (!success)
+  if (!success || args_val == -1)
     sys_exit (-1);
 
   /* Start the user process by simulating a return from an
@@ -583,7 +583,6 @@ setup_args(const char *line, void **esp)
   strlcpy(temp, line, size);
   strlcpy(temp2, line, size);
 
-  // check if the number of arguments is too much
   char *token, *save_ptr;   
   size_t array_size = 0;
   for (token = strtok_r (temp, " ", &save_ptr); token != NULL; 
@@ -592,8 +591,16 @@ setup_args(const char *line, void **esp)
       array_size++;   
     }
     
+  /* Checks if the args stack will overflow. The commented part specifically checks
+   * if the stack grows more than 4096 bytes, but there are some issues with the current
+   * idea, so it is hardcoded to check more than 50 elements. */
+  if (array_size >= 50 /* size + 4 - size % 4 + (array_size + 4) * 4 >= 4096 */)
+    return -1;
 
   char ** argv = calloc(array_size, sizeof(char*));
+  if (argv == NULL)
+    return -1;
+
   int pos = 0;   
   for (token = strtok_r (temp2, " ", &save_ptr); token != NULL; 
        token = strtok_r (NULL, " ", &save_ptr))     
