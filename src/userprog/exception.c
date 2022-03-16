@@ -149,8 +149,15 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
+  if (!user)
+    {
+      f->eip = (void (*)(void))f->eax;
+      f->eax = -1;
+      return;
+    }
+
   if (user)
-      sys_exit (-1);
+   sys_exit (-1);
 
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to

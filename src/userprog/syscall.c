@@ -37,6 +37,9 @@ static void sys_close (int fd);
 static struct file *get_file_from_fd (int fd);
 static int set_next_fd (struct file *file, const char *filename);
 static void validate_fd (int fd, int syscall);
+static void copy_from_user (const void *user, int bytes);
+static void string_copy_from_user (const char *user);
+static int get_user (const uint8_t *uaddr);
 
 void
 syscall_init (void) 
@@ -49,7 +52,7 @@ static void
 syscall_handler (struct intr_frame *f) 
 {
   uint32_t * us = (uint32_t *)f->esp;
-  validate_ptr ((void*)us);
+  validate_ptr ((void*)us, STACK, 0);
   int sys_call_number = us[0];
 
   switch (sys_call_number)
@@ -61,6 +64,7 @@ syscall_handler (struct intr_frame *f)
         }
       case SYS_EXIT:
         {
+          validate_ptr ((void*)us + 1, STACK, 0);
           int status = us[1];
           status = status <= -1 ? -1 : status;
           f->eax = status;
@@ -69,7 +73,8 @@ syscall_handler (struct intr_frame *f)
         }
       case SYS_EXEC:
         {
-          validate_ptr ((void *) us[1]);
+          validate_ptr ((void*)us + 1, STACK, 0);
+          validate_ptr ((void *) us[1], STRING, 0);
           /* Temporary fix to allocate and copy cmd_line to kernel heap. */
           char *cmd_line = palloc_get_page (0);   
           if (cmd_line == NULL)
@@ -84,35 +89,40 @@ syscall_handler (struct intr_frame *f)
         }
       case SYS_WAIT:
         {
+          validate_ptr ((void*)us + 1, STACK, 0);
           uint32_t pid = (uint32_t)us[1];
           f->eax = (uint32_t)sys_wait (pid);
           break;
         }
       case SYS_CREATE:
         {
+          validate_ptr ((void*)us + 1, STACK, 0);
+          validate_ptr ((void*)us + 2, STACK, 0);
           const char *file = (char *)us[1];
           unsigned initial_size = (unsigned)us[2];
-          validate_ptr ((void *)file);
+          validate_ptr ((void *)file, STRING, 0);
           f->eax = (uint32_t)sys_create (file, initial_size);
           break;
         }
       case SYS_REMOVE:
         {
+          validate_ptr ((void*)us + 1, STACK, 0);
           const char *file = (char *)us[1];
-          validate_ptr ((void *)file);
+          validate_ptr ((void *)file, STRING, 0);
           f->eax = (uint32_t)sys_remove (file);
           break;
         }
       case SYS_OPEN:
         {
+          validate_ptr ((void*)us + 1, STACK, 0);
           const char *file = (char *)us[1];
-          validate_ptr ((void *)file);
+          validate_ptr ((void *)file, STRING, 0);
           f->eax = (uint32_t)sys_open (file);
           break;
         }
       case SYS_FILESIZE:
         {
-          validate_ptr ((void *) us + 1);
+          validate_ptr ((void *) us + 1, STACK, 0);
           int fd = us[1];
           validate_fd (fd, sys_call_number);
           f->eax = (uint32_t)sys_filesize (fd);
@@ -120,26 +130,34 @@ syscall_handler (struct intr_frame *f)
         }
       case SYS_READ:
         {
+          validate_ptr ((void*)us + 1, STACK, 0);
+          validate_ptr ((void*)us + 2, STACK, 0);
+          validate_ptr ((void*)us + 3, STACK, 0);
           int fd = us[1];
           validate_fd (fd, sys_call_number);
           void *buffer = (void *)us[2];
-          validate_ptr (buffer);
           unsigned size = (unsigned)us[3];
+          validate_ptr (buffer, READWRITE, size);
           f->eax = (uint32_t)sys_read (fd, buffer, size);
           break;
         }
       case SYS_WRITE:
         {
+          validate_ptr ((void*)us + 1, STACK, 0);
+          validate_ptr ((void*)us + 2, STACK, 0);
+          validate_ptr ((void*)us + 3, STACK, 0);
           int fd = us[1];
           validate_fd (fd, sys_call_number);
           const void *buffer = (void *)us[2];
-          validate_ptr (buffer);
           unsigned size = (unsigned)us[3];
+          validate_ptr (buffer, READWRITE, size);
           f->eax = (uint32_t)sys_write (fd, buffer, size);
           break;
         }
       case SYS_SEEK:
         {
+          validate_ptr ((void*)us + 1, STACK, 0);
+          validate_ptr ((void*)us + 2, STACK, 0);
           int fd = us[1];
           validate_fd (fd, sys_call_number);
           unsigned position = (unsigned)us[2];
@@ -148,7 +166,7 @@ syscall_handler (struct intr_frame *f)
         }
       case SYS_TELL:
         {
-          validate_ptr ((void*) us + 1);
+          validate_ptr ((void*) us + 1, STACK, 0);
           int fd = us[1];
           validate_fd (fd, sys_call_number);
           f->eax = (uint32_t)sys_tell (fd);
@@ -156,7 +174,7 @@ syscall_handler (struct intr_frame *f)
         }
       case SYS_CLOSE:
         {
-          validate_ptr ((void*) us + 1);
+          validate_ptr ((void*) us + 1, STACK, 0);
           int fd = us[1];
           validate_fd (fd, sys_call_number);
           sys_close (fd);
@@ -165,18 +183,125 @@ syscall_handler (struct intr_frame *f)
     }
 }
 
+/* Reads a byte at user virtual address UADDR.
+   UADDR must be below PHYS_BASE.
+   Returns the byte value if successful, -1 if a segfault
+   occurred. */
+static int
+get_user (const uint8_t *uaddr)
+{
+  int result;
+  asm ("movl $1f, %0; movzbl %1, %0; 1:"
+       : "=&a" (result) : "m" (*uaddr));
+  return result;
+}
+
+/* Copies the user data into the kernel (supposedly) */
+static void
+copy_from_user (const void *user, int bytes)
+{
+  int val = -1;
+  for (int index = 0; index < bytes; index ++)
+    {
+      if (!is_user_vaddr (user + index))
+        {
+          val = -1;
+          break;
+        }
+      val = get_user ((uint8_t *)(user + index));
+      if (val == -1)
+        break;
+    }
+  if (val == -1)
+    sys_exit (val);
+}
+
+/* Copies the string user data to the kernel (supposedly) */
+static void
+string_copy_from_user (const char *user)
+{
+  int index = 0;
+  int val = -1;
+  do
+    {
+      if (!is_user_vaddr (user + index))
+        {
+          val = -1;
+          break;
+        }
+      val = get_user ((uint8_t *)(user + index));
+      if (val == -1)
+        break;
+    } while (*(user + index ++) != '\0');
+  if (val == -1)
+    sys_exit (val);
+}
+
 /* Checks if the current pointer is a valid one */
 void
-validate_ptr(const void *addr)
+validate_ptr(const void *addr, enum pointer_check status, unsigned size)
 {
   if (!is_user_vaddr (addr))
     {
       sys_exit (-1);
     }
 
-  if (pagedir_get_page(thread_current ()->pagedir, addr) == NULL)
+  switch (status)
     {
-      sys_exit (-1);
+      case NONE:
+        {
+          if (pagedir_get_page(thread_current ()->pagedir, addr) == NULL)
+            {
+              sys_exit (-1);
+            }
+          break;
+        }
+      case STACK:
+        {
+          copy_from_user (addr, 4);
+          break;
+        }
+      case STRING:
+        {
+          string_copy_from_user ((char *)addr);
+          break;
+        }
+      case READWRITE:
+        {
+          struct thread *cur = thread_current ();
+          /* For loop checks the buffer for read/write */
+          for (const void *start = addr; start < addr + size; start += PGSIZE)
+            {
+              if (!is_user_vaddr (start))
+                {
+                  sys_exit (-1);
+                }
+              if (pagedir_get_page(cur->pagedir, start) == NULL)
+                {
+                  sys_exit (-1);
+                }
+            }
+          /* Checks if the size of the buffer is too big */
+          if (addr + size == addr)
+            {
+              if (pagedir_get_page(cur->pagedir, addr) == NULL)
+                {
+                  sys_exit (-1);
+                }
+            }
+          else if (addr + size > addr)
+            {
+              if (pagedir_get_page(cur->pagedir, addr + size - 1) == NULL)
+                {
+                  sys_exit (-1);
+                }
+            }
+          else
+            {
+              sys_exit (-1);
+            }
+          break;
+        }
     }
 }
 
