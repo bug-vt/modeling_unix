@@ -18,6 +18,12 @@
 #include <threads/synch.h>
 #include "threads/palloc.h"
 
+#define WORD_SIZE 4
+#define SYSCALL1 WORD_SIZE 
+#define SYSCALL2 (WORD_SIZE * 2)
+#define SYSCALL3 (WORD_SIZE * 3)
+#define FNAME_CAP 512
+
 static void syscall_handler (struct intr_frame *);
 
 /* Our Code */
@@ -35,11 +41,13 @@ static unsigned sys_tell (int fd);
 static void sys_close (int fd);
 
 static struct file *get_file_from_fd (int fd);
-static int set_next_fd (struct file *file, const char *filename);
-static void validate_fd (int fd, int syscall);
-static void copy_from_user (const void *user, int bytes);
-static void string_copy_from_user (const char *user);
+static int set_next_fd (struct file *file);
+static void validate_ptr (const void *addr);
+static void validate_buffer (void *buffer, unsigned size);
 static int get_user (const uint8_t *uaddr);
+static void copy_from_user (void *to, const void *user, size_t bytes);
+static void str_copy_from_user (char *dst, const char *user);
+
 
 void
 syscall_init (void) 
@@ -51,11 +59,15 @@ syscall_init (void)
 static void
 syscall_handler (struct intr_frame *f) 
 {
-  uint32_t * us = (uint32_t *)f->esp;
-  validate_ptr ((void*)us, STACK, 0);
-  int sys_call_number = us[0];
+  int syscall_number;
+  copy_from_user (&syscall_number, f->esp, WORD_SIZE);
+  
+  int args[3];  /* Array holding maximum of 3 arguments. */
+  void *stack_arg_addr = f->esp + WORD_SIZE; /* Starting address of the arguments
+                                                in stack */
+  char file_name[FNAME_CAP];  /* Will hold copy of the user-provided file name */
 
-  switch (sys_call_number)
+  switch (syscall_number)
     {
       case SYS_HALT:
         {
@@ -64,120 +76,81 @@ syscall_handler (struct intr_frame *f)
         }
       case SYS_EXIT:
         {
-          validate_ptr ((void*)us + 1, STACK, 0);
-          int status = us[1];
-          status = status <= -1 ? -1 : status;
-          f->eax = status;
-          sys_exit (status);
+          copy_from_user (&args, stack_arg_addr, SYSCALL1);
+          f->eax = args[0];
+          sys_exit (args[0]);
           break;
         }
       case SYS_EXEC:
         {
-          validate_ptr ((void*)us + 1, STACK, 0);
-          validate_ptr ((void *) us[1], STRING, 0);
-          /* Temporary fix to allocate and copy cmd_line to kernel heap. */
-          char *cmd_line = palloc_get_page (0);   
-          if (cmd_line == NULL)
-            {
-              f->eax = TID_ERROR;
-              break;
-            }
-          strlcpy (cmd_line, (char *) us[1], PGSIZE);   
-          f->eax = (uint32_t) sys_exec (cmd_line);
-          palloc_free_page (cmd_line);
+          copy_from_user (&args, stack_arg_addr, SYSCALL1);
+          str_copy_from_user (file_name, (char *) args[0]);
+          f->eax = sys_exec (file_name);
           break;
         }
       case SYS_WAIT:
         {
-          validate_ptr ((void*)us + 1, STACK, 0);
-          uint32_t pid = (uint32_t)us[1];
-          f->eax = (uint32_t)sys_wait (pid);
+          copy_from_user (&args, stack_arg_addr, SYSCALL1);
+          f->eax = sys_wait (args[0]);
           break;
         }
       case SYS_CREATE:
         {
-          validate_ptr ((void*)us + 1, STACK, 0);
-          validate_ptr ((void*)us + 2, STACK, 0);
-          const char *file = (char *)us[1];
-          unsigned initial_size = (unsigned)us[2];
-          validate_ptr ((void *)file, STRING, 0);
-          f->eax = (uint32_t)sys_create (file, initial_size);
+          copy_from_user (&args, stack_arg_addr, SYSCALL2);
+          str_copy_from_user (file_name, (char *) args[0]);
+          f->eax = sys_create (file_name, args[1]);
           break;
         }
       case SYS_REMOVE:
         {
-          validate_ptr ((void*)us + 1, STACK, 0);
-          const char *file = (char *)us[1];
-          validate_ptr ((void *)file, STRING, 0);
-          f->eax = (uint32_t)sys_remove (file);
+          copy_from_user (&args, stack_arg_addr, SYSCALL1);
+          str_copy_from_user (file_name, (char *) args[0]);
+          f->eax = sys_remove (file_name);
           break;
         }
       case SYS_OPEN:
         {
-          validate_ptr ((void*)us + 1, STACK, 0);
-          const char *file = (char *)us[1];
-          validate_ptr ((void *)file, STRING, 0);
-          f->eax = (uint32_t)sys_open (file);
+          copy_from_user (&args, stack_arg_addr, SYSCALL1);
+          str_copy_from_user (file_name, (char *) args[0]);
+          f->eax = sys_open (file_name);
           break;
         }
       case SYS_FILESIZE:
         {
-          validate_ptr ((void *) us + 1, STACK, 0);
-          int fd = us[1];
-          validate_fd (fd, sys_call_number);
-          f->eax = (uint32_t)sys_filesize (fd);
+          copy_from_user (&args, stack_arg_addr, SYSCALL1);
+          f->eax = sys_filesize (args[0]);
           break;
         }
       case SYS_READ:
         {
-          validate_ptr ((void*)us + 1, STACK, 0);
-          validate_ptr ((void*)us + 2, STACK, 0);
-          validate_ptr ((void*)us + 3, STACK, 0);
-          int fd = us[1];
-          validate_fd (fd, sys_call_number);
-          void *buffer = (void *)us[2];
-          unsigned size = (unsigned)us[3];
-          validate_ptr (buffer, READWRITE, size);
-          f->eax = (uint32_t)sys_read (fd, buffer, size);
+          copy_from_user (&args, stack_arg_addr, SYSCALL3);
+          validate_buffer ((void *) args[1], args[2]);
+          f->eax = sys_read (args[0], (char *) args[1], args[2]);
           break;
         }
       case SYS_WRITE:
         {
-          validate_ptr ((void*)us + 1, STACK, 0);
-          validate_ptr ((void*)us + 2, STACK, 0);
-          validate_ptr ((void*)us + 3, STACK, 0);
-          int fd = us[1];
-          validate_fd (fd, sys_call_number);
-          const void *buffer = (void *)us[2];
-          unsigned size = (unsigned)us[3];
-          validate_ptr (buffer, READWRITE, size);
-          f->eax = (uint32_t)sys_write (fd, buffer, size);
+          copy_from_user (&args, stack_arg_addr, SYSCALL3);
+          validate_buffer ((void *) args[1], args[2]);
+          f->eax = sys_write (args[0], (char *) args[1], args[2]);
           break;
         }
       case SYS_SEEK:
         {
-          validate_ptr ((void*)us + 1, STACK, 0);
-          validate_ptr ((void*)us + 2, STACK, 0);
-          int fd = us[1];
-          validate_fd (fd, sys_call_number);
-          unsigned position = (unsigned)us[2];
-          sys_seek (fd, position);
+          copy_from_user (&args, stack_arg_addr, SYSCALL2);
+          sys_seek (args[0], args[1]);
           break;
         }
       case SYS_TELL:
         {
-          validate_ptr ((void*) us + 1, STACK, 0);
-          int fd = us[1];
-          validate_fd (fd, sys_call_number);
-          f->eax = (uint32_t)sys_tell (fd);
+          copy_from_user (&args, stack_arg_addr, SYSCALL1);
+          f->eax = sys_tell (args[0]);
           break;
         }
       case SYS_CLOSE:
         {
-          validate_ptr ((void*) us + 1, STACK, 0);
-          int fd = us[1];
-          validate_fd (fd, sys_call_number);
-          sys_close (fd);
+          copy_from_user (&args, stack_arg_addr, SYSCALL1);
+          sys_close (args[0]);
           break;
         }
     }
@@ -196,131 +169,80 @@ get_user (const uint8_t *uaddr)
   return result;
 }
 
-/* Copies the user data into the kernel (supposedly) */
+/* Copies the user data into the kernel space. */
 static void
-copy_from_user (const void *user, int bytes)
+copy_from_user (void *to, const void *user, size_t bytes)
 {
-  int val = -1;
-  for (int index = 0; index < bytes; index ++)
+  char *copy = (char *) to;  
+  for (size_t index = 0; index < bytes; index ++)
     {
       if (!is_user_vaddr (user + index))
-        {
-          val = -1;
-          break;
-        }
-      val = get_user ((uint8_t *)(user + index));
-      if (val == -1)
-        break;
+        sys_exit (-1);
+
+      int copied_byte = get_user ((uint8_t *)(user + index));
+      if (copied_byte == -1)
+        sys_exit (-1);
+
+      copy[index] = copied_byte;
     }
-  if (val == -1)
-    sys_exit (val);
 }
 
-/* Copies the string user data to the kernel (supposedly) */
+/* Copies the string user data to the kernel. */
 static void
-string_copy_from_user (const char *user)
+str_copy_from_user (char *dst, const char *user)
 {
+  char *copy = dst;
   int index = 0;
-  int val = -1;
   do
     {
+      /* Prevent buffer overflow attacks. */
+      if (index >= FNAME_CAP)
+        sys_exit (-1);
+
       if (!is_user_vaddr (user + index))
-        {
-          val = -1;
-          break;
-        }
-      val = get_user ((uint8_t *)(user + index));
-      if (val == -1)
-        break;
+        sys_exit (-1);
+
+      int copied_byte = get_user ((uint8_t *)(user + index));
+      if (copied_byte == -1)
+        sys_exit (-1);
+
+      copy[index] = copied_byte;
+
     } while (*(user + index ++) != '\0');
-  if (val == -1)
-    sys_exit (val);
+
+  copy[index] = '\0';
+}
+
+/* Checks if the given buffer span over the valid address range. */
+static void
+validate_buffer (void *buffer, unsigned size)
+{
+  if (size == 0)
+    return;
+  /* Checks if the size of the buffer is too big */
+  if (buffer > buffer + size)
+    sys_exit (-1);
+  /* For loop checks if pages allocated for the buffer
+     is within the valid user address range. */
+  for (const void *addr = buffer; addr < buffer + size; addr += PGSIZE)
+    validate_ptr (addr);
+
+  /* Checks the last byte of the buffer,
+     since it could located in the middle of the page. */
+  validate_ptr (buffer + size - 1);
 }
 
 /* Checks if the current pointer is a valid one */
 void
-validate_ptr(const void *addr, enum pointer_check status, unsigned size)
+validate_ptr (const void *addr)
 {
+  struct thread *cur = thread_current ();
+
   if (!is_user_vaddr (addr))
-    {
-      sys_exit (-1);
-    }
+    sys_exit (-1);
 
-  switch (status)
-    {
-      case NONE:
-        {
-          if (pagedir_get_page(thread_current ()->pagedir, addr) == NULL)
-            {
-              sys_exit (-1);
-            }
-          break;
-        }
-      case STACK:
-        {
-          copy_from_user (addr, 4);
-          break;
-        }
-      case STRING:
-        {
-          string_copy_from_user ((char *)addr);
-          break;
-        }
-      case READWRITE:
-        {
-          struct thread *cur = thread_current ();
-          /* For loop checks the buffer for read/write */
-          for (const void *start = addr; start < addr + size; start += PGSIZE)
-            {
-              if (!is_user_vaddr (start))
-                {
-                  sys_exit (-1);
-                }
-              if (pagedir_get_page(cur->pagedir, start) == NULL)
-                {
-                  sys_exit (-1);
-                }
-            }
-          /* Checks if the size of the buffer is too big */
-          if (addr + size == addr)
-            {
-              if (pagedir_get_page(cur->pagedir, addr) == NULL)
-                {
-                  sys_exit (-1);
-                }
-            }
-          else if (addr + size > addr)
-            {
-              if (pagedir_get_page(cur->pagedir, addr + size - 1) == NULL)
-                {
-                  sys_exit (-1);
-                }
-            }
-          else
-            {
-              sys_exit (-1);
-            }
-          break;
-        }
-    }
-}
-
-/* Checks if the current file descriptor is a valid one */
-static void
-validate_fd (int fd, int syscall)
-{
-  if (fd == 0 && syscall == SYS_READ)
-    {
-      ; /* Do nothing */
-    }
-  else if (fd == 1 && syscall == SYS_WRITE)
-    {
-      ; /* Do nothing */
-    }
-  else if (fd < 3 || fd > 1023)
-    {
-      sys_exit (-1);
-    }
+  if (pagedir_get_page(cur->pagedir, addr) == NULL)
+    sys_exit (-1);
 }
 
 /* System call for halting */
@@ -384,7 +306,7 @@ sys_open(const char* filename)
       lock_release (&filesys_lock);
       return -1;
     }
-  int fd = set_next_fd (file, filename);
+  int fd = set_next_fd (file);
   if (fd == -1)
     {
       file_close (file);
@@ -402,7 +324,7 @@ sys_filesize(int fd)
   if (file == NULL)
     {
       lock_release (&filesys_lock);
-      sys_exit (-1);
+      return -1;
     }
   int size = (int)file_length(file);
   lock_release (&filesys_lock);
@@ -413,6 +335,7 @@ sys_filesize(int fd)
 static int
 sys_read(int fd, void *buffer, unsigned size)
 {
+
   if (fd == 0) /* reading from stdin */
     {
       lock_acquire (&filesys_lock);
@@ -430,12 +353,13 @@ sys_read(int fd, void *buffer, unsigned size)
       if (file == NULL)
         {
           lock_release (&filesys_lock);
-          sys_exit (-1);
+          return -1;
         }
       int fsize = file_read (file, buffer, size);
       lock_release (&filesys_lock);
       return fsize;
     }
+  
   return 0;
 }
 
@@ -456,7 +380,7 @@ sys_write(int fd, const void *buffer, unsigned size)
       if (file == NULL)
         {
           lock_release (&filesys_lock);
-          sys_exit (-1);
+          return -1;
         }
       int fsize = file_write (file, buffer, size);
       lock_release (&filesys_lock);
@@ -489,7 +413,7 @@ sys_tell(int fd)
   if (file == NULL)
     {
       lock_release (&filesys_lock);
-      sys_exit (-1);
+      return -1;
     }
   int position = (unsigned)file_tell (file);
   lock_release (&filesys_lock);
@@ -502,7 +426,7 @@ sys_close(int fd)
 {
   struct thread *cur = thread_current ();
   lock_acquire (&filesys_lock);
-  struct file *file = cur->fd_table->fd_to_file[fd];
+  struct file *file = get_file_from_fd (fd);
   if (file == NULL)
     {
       lock_release (&filesys_lock);
@@ -518,28 +442,26 @@ sys_close(int fd)
 static struct file *
 get_file_from_fd (int fd)
 {
-  struct thread *cur = thread_current ();
-  return cur->fd_table->fd_to_file[fd];
+  if (fd < 0 || fd >= 1024)
+    return NULL;
+
+  return thread_current ()->fd_table->fd_to_file[fd];
 }
 
 /* Finds the next available file descriptor mapping and
  * sets the values within it. Also checks if the file
  * can be written into. */
 static int
-set_next_fd (struct file *file, const char *filename)
+set_next_fd (struct file *file)
 {
-  struct thread *cur = thread_current ();
-  for (int fd = 3; fd < 1024; fd ++)
+  struct file **fd_table = thread_current ()->fd_table->fd_to_file;
+  for (int fd = 2; fd < 1024; fd++)
     {
-      if (cur->fd_table->fd_to_file[fd] == NULL)
+      if (!fd_table[fd])
         {
-          cur->fd_table->fd_to_file[fd] = file;
-
-          /* Check if it is a running executable */
-          if (strcmp (filename, cur->name) == 0)
-            file_deny_write (file);
+          fd_table[fd] = file;
           return fd;
-        }
+        } 
     }
   return -1;
 }
