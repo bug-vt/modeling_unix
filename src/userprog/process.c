@@ -44,10 +44,16 @@ process_execute (const char *cmd_line)
     tid_t tid;   
 
     /* Make a copy of FILE_NAME.      
-     * Otherwise there's a race between the caller and load(). */   
+       Otherwise there's a race between the caller and load(). 
+       Also note the following: 
+       (1) Command line passed to the Pintos kernel itself is
+           limited to 128 bytes.
+       (2) If called by exec, str_copy_from_user() make sure cmd_line is 
+           less than or equal to one page. */
+
     line_copy = palloc_get_page (0);   
     if (line_copy == NULL)     
-        return TID_ERROR;   
+      return TID_ERROR;   
     strlcpy (line_copy, cmd_line, PGSIZE);   
 
     /* Extract executable file name from raw input line. */
@@ -169,6 +175,9 @@ process_exit (void)
       pagedir_destroy (pd);
     }
 
+  if (cur->syscall_arg != NULL)
+    palloc_free_page (cur->syscall_arg);
+
   /* Print termination message. */
   int status = cur->bond->status;
   printf("%s: exit(%d)\n", cur->name, status);
@@ -182,16 +191,6 @@ process_exit (void)
         }
     }
   palloc_free_page (cur->fd_table);
-
-  /* Closes all open file mappings and free the file mappings table. */
-  for (int index = 0; index < 1024; index ++)
-    {
-      if (cur->file_map_table_ptr->mapids[index] != NULL)
-        {
-          file_close (cur->file_map_table_ptr->mapids[index]->file);
-        }
-    }
-  palloc_free_page (cur->file_map_table_ptr);
 
   /* Close the executable that was running on exiting process.
      This re-enable the write permission. */
@@ -585,37 +584,47 @@ install_page (void *upage, void *kpage, bool writable)
 /* Sets up the stack so that it can be used in
  * user programs */
 static int 
-setup_args(const char *line, void **esp)
+setup_args(const char *cmd_line, void **esp)
 {
-  size_t size = strlen(line) + 1;
-  char temp[size];
-  char temp2[size];
-  strlcpy(temp, line, size);
-  strlcpy(temp2, line, size);
+  /* Note that the size of cmd_line is:
+     (1) <= 128 bytes if cmd_line was passed to the Pintos kernel itself.
+     (2) <= 4096 bytes if passed by exec. This is because str_copy_from_user() 
+         only copy up to 4096 bytes.  
+         
+     However, including meta data (argc, argv[0]...argv[n], **argv) can 
+     still overflow the initial stack. */
+  size_t size = strlen(cmd_line) + 1; 
 
-  char *token, *save_ptr;   
-  size_t array_size = 0;
-  for (token = strtok_r (temp, " ", &save_ptr); token != NULL; 
-       token = strtok_r (NULL, " ", &save_ptr))     
-    {
-      array_size++;   
-    }
-    
-  /* Checks if the args stack will overflow. The commented part specifically checks
-   * if the stack grows more than 4096 bytes, but there are some issues with the current
-   * idea, so it is hardcoded to check more than 50 elements. */
-  if (array_size >= 50 /* size + 4 - size % 4 + (array_size + 4) * 4 >= 4096 */)
-    return -1;
+  char *line_copy = malloc (size);
+  if (line_copy == NULL)     
+    return -1;   
+  strlcpy (line_copy, cmd_line, size);   
+  char **argv = calloc (size, 1);
 
-  char ** argv = calloc(array_size, sizeof(char*));
   if (argv == NULL)
-    return -1;
+    {
+      free (line_copy);
+      return -1;
+    }
 
+  char *token, *save_ptr;
   int pos = 0;   
-  for (token = strtok_r (temp2, " ", &save_ptr); token != NULL; 
+  for (token = strtok_r ((char *) line_copy, " ", &save_ptr); token != NULL; 
        token = strtok_r (NULL, " ", &save_ptr))     
     {
       argv[pos++] = token;     
+    }
+
+   /* Check for stack overflow. 
+      - size = total string size of arguments. 
+      - size % 4 = word-align padding.
+      - ((pos + 1) * 4) = argv[0] ... argv[n], including null sentinel. 
+      - (4 * 3) = argv, argc, and ret */
+  if ((size + (size % 4)) + ((pos + 1) * 4) + (4 * 3) > PGSIZE) 
+    {
+      free (line_copy);
+      free (argv);
+      return -1;
     }
 
   uint32_t pointers[pos];
@@ -664,7 +673,9 @@ setup_args(const char *line, void **esp)
   ptr --;
   *esp -= 4;
   offset += 4;
-  free(argv);
+
+  free (line_copy);
+  free (argv);
   return offset;
 }
 

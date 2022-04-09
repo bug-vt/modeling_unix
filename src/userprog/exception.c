@@ -90,7 +90,8 @@ kill (struct intr_frame *f)
       printf ("%s: dying due to interrupt %#04x (%s).\n",
               thread_name (), f->vec_no, intr_name (f->vec_no));
       intr_dump_frame (f);
-      thread_exit (); 
+      sys_exit (-1);
+      break;
 
     case SEL_KCSEG:
       /* Kernel's code segment, which indicates a kernel bug.
@@ -151,13 +152,10 @@ page_fault (struct intr_frame *f)
 
   if (!user)
     {
-      f->eip = (void (*)(void))f->eax;
+      f->eip = (void (*)(void)) f->eax;
       f->eax = -1;
       return;
     }
-
-  if (user)
-   sys_exit (-1);
 
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to

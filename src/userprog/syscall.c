@@ -22,7 +22,6 @@
 #define SYSCALL1 WORD_SIZE 
 #define SYSCALL2 (WORD_SIZE * 2)
 #define SYSCALL3 (WORD_SIZE * 3)
-#define FNAME_CAP 512
 
 static void syscall_handler (struct intr_frame *);
 
@@ -65,7 +64,11 @@ syscall_handler (struct intr_frame *f)
   int args[3];  /* Array holding maximum of 3 arguments. */
   void *stack_arg_addr = f->esp + WORD_SIZE; /* Starting address of the arguments
                                                 in stack */
-  char file_name[FNAME_CAP];  /* Will hold copy of the user-provided file name */
+  struct thread *cur = thread_current ();
+  cur->syscall_arg = palloc_get_page (PAL_ZERO); /* Will hold copy of the user-provied file name */
+  char *file_name = cur->syscall_arg;
+  if (cur->syscall_arg == NULL)
+    sys_exit (-1);
 
   switch (syscall_number)
     {
@@ -154,6 +157,9 @@ syscall_handler (struct intr_frame *f)
           break;
         }
     }
+
+  palloc_free_page (cur->syscall_arg);
+  cur->syscall_arg = NULL;
 }
 
 /* Reads a byte at user virtual address UADDR.
@@ -196,7 +202,7 @@ str_copy_from_user (char *dst, const char *user)
   do
     {
       /* Prevent buffer overflow attacks. */
-      if (index >= FNAME_CAP)
+      if (index >= PGSIZE)
         sys_exit (-1);
 
       if (!is_user_vaddr (user + index))
@@ -236,12 +242,10 @@ validate_buffer (void *buffer, unsigned size)
 void
 validate_ptr (const void *addr)
 {
-  struct thread *cur = thread_current ();
-
   if (!is_user_vaddr (addr))
     sys_exit (-1);
 
-  if (pagedir_get_page(cur->pagedir, addr) == NULL)
+  if (get_user ((uint8_t *) addr) == -1)
     sys_exit (-1);
 }
 
@@ -345,22 +349,18 @@ sys_read(int fd, void *buffer, unsigned size)
           buf[index] = input_getc ();
         }
       lock_release (&filesys_lock);
+      return size;
     }
-  else
-    {
-      lock_acquire (&filesys_lock);
-      struct file *file = get_file_from_fd (fd);
-      if (file == NULL)
-        {
-          lock_release (&filesys_lock);
-          return -1;
-        }
-      int fsize = file_read (file, buffer, size);
-      lock_release (&filesys_lock);
-      return fsize;
-    }
+
+  struct file *file = get_file_from_fd (fd);
+  if (file == NULL)
+    return -1;
+
+  lock_acquire (&filesys_lock);
+  int read = file_read (file, buffer, size);
+  lock_release (&filesys_lock);
   
-  return 0;
+  return read;
 }
 
 /* System call for writing */
@@ -372,21 +372,18 @@ sys_write(int fd, const void *buffer, unsigned size)
       lock_acquire (&filesys_lock);
       putbuf (buffer, size);
       lock_release (&filesys_lock);
+      return size;
     }
-  else
-    {
-      lock_acquire (&filesys_lock);
-      struct file *file = get_file_from_fd (fd);
-      if (file == NULL)
-        {
-          lock_release (&filesys_lock);
-          return -1;
-        }
-      int fsize = file_write (file, buffer, size);
-      lock_release (&filesys_lock);
-      return fsize;
-    }
-  return 0;
+
+  struct file *file = get_file_from_fd (fd);
+  if (file == NULL)
+    return -1;
+
+  lock_acquire (&filesys_lock);
+  int written = file_write (file, buffer, size);
+  lock_release (&filesys_lock);
+
+  return written;
 }
 
 /* System call for seeking */

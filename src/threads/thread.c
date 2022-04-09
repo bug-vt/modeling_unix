@@ -257,20 +257,11 @@ thread_create (const char *name, int nice, thread_func *function, void *aux)
       return TID_ERROR;
     }
 
-  struct file_map_table *file_map_table_ptr = palloc_get_page (PAL_ZERO);
-  if (file_map_table_ptr == NULL)
-    {
-      free (bond);
-      palloc_free_page (fd_table);
-      return TID_ERROR;
-    }
-
   t = do_thread_create(name, nice, function, aux);
   if (t == NULL)
     {
       free (bond);
       palloc_free_page (fd_table);
-      palloc_free_page (file_map_table_ptr);
       return TID_ERROR;
     }
 
@@ -289,8 +280,6 @@ thread_create (const char *name, int nice, thread_func *function, void *aux)
 
   /* Attach empty file descriptor table to the new process. */
   t->fd_table = fd_table;
-  /* Attach empty file mapping table to the new process. */
-  t->file_map_table_ptr = file_map_table_ptr;
   /* Must save tid here - 't' could already be freed when we return 
      from wake_up_new_thread */ 
   tid_t tid = t->tid;
@@ -739,6 +728,7 @@ init_thread (struct thread *t, const char *name, int nice)
   t->timer_start = 0;
   t->timer_stop = 0;
   list_init (&t->children);
+  t->syscall_arg = NULL;
   t->magic = THREAD_MAGIC;
   if (cpu_can_acquire_spinlock)
     spinlock_acquire (&all_lock);
