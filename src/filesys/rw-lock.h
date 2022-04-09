@@ -15,7 +15,7 @@ struct rw_lock
   struct condition can_read;    /* Channel for signaling pending readers. */
   struct condition can_write;   /* Channel for signaling pending writers. */
   int pending_readers;          /* Number of pending readers. */
-  bool pending_writers;         /* Indicate present of pending writers. */
+  bool pending_writer;          /* Indicate present of pending writers. */
   rw_mode mode;                 /* Read-write lock status. */
 };
 

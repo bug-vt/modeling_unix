@@ -101,9 +101,7 @@ start_process (void *file_name_)
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
 
-  lock_acquire (&filesys_lock);
   success = load (file_name, &if_.eip, &if_.esp);
-  lock_release (&filesys_lock);
 
   /* Set up user provided arguments to the stack. */
   int args_val = setup_args (file_name, &if_.esp);
@@ -194,9 +192,7 @@ process_exit (void)
 
   /* Close the executable that was running on exiting process.
      This re-enable the write permission. */
-  lock_acquire (&filesys_lock);
   file_close (cur->file);
-  lock_release (&filesys_lock);
 
   /* Remove children list and reap zombie children if any. 
      Otherwise, make the alive children to orphan. */

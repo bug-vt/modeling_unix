@@ -52,7 +52,6 @@ void
 syscall_init (void) 
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
-  lock_init (&filesys_lock);
 }
 
 static void
@@ -283,9 +282,7 @@ sys_wait(uint32_t pid)
 static bool
 sys_create(const char *file, unsigned initial_size)
 {
-  lock_acquire (&filesys_lock);
   bool val = filesys_create (file, initial_size);
-  lock_release (&filesys_lock);
   return val;
 }
 
@@ -293,9 +290,7 @@ sys_create(const char *file, unsigned initial_size)
 static bool
 sys_remove(const char *file)
 {
-  lock_acquire (&filesys_lock);
   bool val = filesys_remove (file);
-  lock_release (&filesys_lock);
   return val;
 }
 
@@ -303,11 +298,9 @@ sys_remove(const char *file)
 static int
 sys_open(const char* filename)
 {
-  lock_acquire (&filesys_lock);
   struct file *file = filesys_open (filename);
   if (file == NULL)
     {
-      lock_release (&filesys_lock);
       return -1;
     }
   int fd = set_next_fd (file);
@@ -315,7 +308,6 @@ sys_open(const char* filename)
     {
       file_close (file);
     }
-  lock_release (&filesys_lock);
   return fd;
 }
 
@@ -323,15 +315,12 @@ sys_open(const char* filename)
 static int
 sys_filesize(int fd)
 {
-  lock_acquire (&filesys_lock);
   struct file *file = get_file_from_fd (fd);
   if (file == NULL)
     {
-      lock_release (&filesys_lock);
       return -1;
     }
   int size = (int)file_length(file);
-  lock_release (&filesys_lock);
   return size;
 }
 
@@ -342,13 +331,11 @@ sys_read(int fd, void *buffer, unsigned size)
 
   if (fd == 0) /* reading from stdin */
     {
-      lock_acquire (&filesys_lock);
       char *buf = buffer;
       for (unsigned int index = 0; index < size; index ++)
         {
           buf[index] = input_getc ();
         }
-      lock_release (&filesys_lock);
       return size;
     }
 
@@ -356,9 +343,7 @@ sys_read(int fd, void *buffer, unsigned size)
   if (file == NULL)
     return -1;
 
-  lock_acquire (&filesys_lock);
   int read = file_read (file, buffer, size);
-  lock_release (&filesys_lock);
   
   return read;
 }
@@ -369,9 +354,7 @@ sys_write(int fd, const void *buffer, unsigned size)
 {
   if (fd == 1) /* writing to stdout */
     {
-      lock_acquire (&filesys_lock);
       putbuf (buffer, size);
-      lock_release (&filesys_lock);
       return size;
     }
 
@@ -379,9 +362,7 @@ sys_write(int fd, const void *buffer, unsigned size)
   if (file == NULL)
     return -1;
 
-  lock_acquire (&filesys_lock);
   int written = file_write (file, buffer, size);
-  lock_release (&filesys_lock);
 
   return written;
 }
@@ -390,30 +371,24 @@ sys_write(int fd, const void *buffer, unsigned size)
 static void
 sys_seek(int fd, unsigned position)
 {
-  lock_acquire (&filesys_lock);
   struct file *file = get_file_from_fd (fd);
   if (file == NULL)
     {
-      lock_release (&filesys_lock);
       sys_exit (-1);
     }
   file_seek (file, position);
-  lock_release (&filesys_lock);
 }
 
 /* System call for telling */
 static unsigned
 sys_tell(int fd)
 {
-  lock_acquire (&filesys_lock);
   struct file *file = get_file_from_fd (fd);
   if (file == NULL)
     {
-      lock_release (&filesys_lock);
       return -1;
     }
   int position = (unsigned)file_tell (file);
-  lock_release (&filesys_lock);
   return position;
 }
 
@@ -422,17 +397,14 @@ static void
 sys_close(int fd)
 {
   struct thread *cur = thread_current ();
-  lock_acquire (&filesys_lock);
   struct file *file = get_file_from_fd (fd);
   if (file == NULL)
     {
-      lock_release (&filesys_lock);
       sys_exit (-1);
     }
   
   file_close (cur->fd_table->fd_to_file[fd]);
   cur->fd_table->fd_to_file[fd] = NULL;
-  lock_release (&filesys_lock);
 }
 
 /* Obtains a file from file descriptor */
