@@ -379,15 +379,16 @@ inode_close (struct inode *inode)
       /* Deallocate blocks if removed. */
       if (inode->removed) 
         {
-          struct cache_block *block = cache_get_block (inode->sector, false); 
-          struct inode_disk *data = (struct inode_disk *) cache_read_block (block);
           /* Un-mark all data blocks associated with given inode. */
-          for (off_t pos = 0; pos < data->length; pos += BLOCK_SECTOR_SIZE)
+          for (off_t pos = 0; pos < inode_length(inode); pos += BLOCK_SECTOR_SIZE)
             {
               block_sector_t sector = byte_to_sector (inode, pos, false);
               if ((int32_t) sector != -1)
                 free_map_release (sector, 1); 
             }
+
+          struct cache_block *block = cache_get_block (inode->sector, true); 
+          struct inode_disk *data = (struct inode_disk *) cache_read_block (block);
         
           /* Un-mark indirect block. */
           if ((int32_t) data->indirect != -1)
