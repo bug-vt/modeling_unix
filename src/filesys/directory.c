@@ -5,6 +5,9 @@
 #include "filesys/filesys.h"
 #include "filesys/inode.h"
 #include "threads/malloc.h"
+#include "threads/palloc.h"
+#include "threads/vaddr.h"
+#include "threads/thread.h"
 
 /* A directory. */
 struct dir 
@@ -26,7 +29,7 @@ struct dir_entry
 bool
 dir_create (block_sector_t sector, size_t entry_cnt)
 {
-  return inode_create (sector, entry_cnt * sizeof (struct dir_entry));
+  return inode_create (sector, entry_cnt * sizeof (struct dir_entry), true);
 }
 
 /* Opens and returns the directory for the given INODE, of which
@@ -81,6 +84,72 @@ struct inode *
 dir_get_inode (struct dir *dir) 
 {
   return dir->inode;
+}
+
+/* Traverse the path until reach destination directory
+   and extract file name from the path. */
+struct dir *
+dir_traverse_path (const char *path, const char **file_name, bool is_dir)
+{
+  ASSERT (path != NULL);
+  struct inode *inode = NULL;
+  struct dir *dir = NULL;
+  char *dir_name, *path_ptr;
+
+  /* Copy the given name, including path, for the file. */
+  char *path_copy = palloc_get_page (0);   
+  if (path_copy == NULL)     
+    return NULL;   
+  strlcpy (path_copy, path, PGSIZE);
+
+  /* Extract file name from the path
+     and name of outermost directory. */
+  if (strchr (path, '/'))
+    {
+      *file_name = strrchr (path, '/') + 1;
+      dir_name = strtok_r ((char *) path_copy, "/", &path_ptr); 
+    }
+  else
+    {
+      *file_name = path;
+      dir_name = (char *) path;
+    }
+
+  /* Distinguish between absolute path or relative path. */
+  if (false /* Insert condition for relative path */)
+    dir = thread_current ()->current_dir;
+  else
+    dir = dir_open_root ();
+
+  ASSERT (dir_name != NULL); 
+  /* Iterate over the path until reach destination directory. */
+  for (; dir_name != NULL; dir_name = strtok_r (NULL, "/", &path_ptr))     
+    {
+      if (!dir)
+        {
+          palloc_free_page (path_copy);
+          return NULL;
+        }
+
+      /* Reached destination. */
+      if (!strcmp(dir_name, *file_name) && !is_dir)
+        break;
+
+      inode_close (inode);
+      if (!dir_lookup (dir, dir_name, &inode))
+        {
+          dir_close (dir);
+          palloc_free_page (path_copy);
+          return NULL;
+        }
+
+      /* Move to next directory. */
+      dir_close (dir);
+      dir = dir_open (inode);
+    }
+
+  palloc_free_page (path_copy);
+  return dir;
 }
 
 /* Searches DIR for a file with the given NAME.
@@ -234,3 +303,4 @@ dir_readdir (struct dir *dir, char name[NAME_MAX + 1])
     }
   return false;
 }
+

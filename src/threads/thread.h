@@ -155,6 +155,8 @@ struct thread
   /* File name for syscalls that uses them */
   char *syscall_arg;
 
+  struct dir *current_dir; /* Current working directory. */
+
   /* Owned by thread.c. */
   unsigned magic; /* Detects stack overflow. */
 };

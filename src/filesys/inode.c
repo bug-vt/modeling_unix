@@ -9,7 +9,7 @@
 #include "filesys/cache.h"
 #include "stdio.h"
 
-#define NUM_DIRECT 124
+#define NUM_DIRECT 123
 #define NUM_INDIRECT 128
 #define NUM_DOUBLE_INDIRECT 16384
 
@@ -22,6 +22,9 @@
 struct inode_disk
   {
     off_t length;                       /* File size in bytes. */
+    int is_dir;                         /* File type.
+                                           0 = File
+                                           1 = Directory */
     unsigned magic;                     /* Magic number. */
     block_sector_t direct[NUM_DIRECT];
     block_sector_t indirect;
@@ -92,7 +95,7 @@ byte_to_sector (const struct inode *inode, off_t pos, bool write)
 }
 
 /* Find the corresponding sector in sparse file 
-   using the given sector mapping from the sets of direct blocks. */
+   using the given sector mapping in the sets of direct blocks. */
 static block_sector_t 
 lookup_direct_table (struct inode_disk *data, int mapping, bool write)
 {
@@ -116,7 +119,7 @@ lookup_direct_table (struct inode_disk *data, int mapping, bool write)
 }
 
 /* Find the corresponding sector in sparse file 
-   using the given sector mapping from the indirect block. */
+   using the given sector mapping in the indirect block. */
 static block_sector_t
 lookup_indirect_table (struct inode_disk *data, int mapping, bool write)
 {
@@ -156,7 +159,7 @@ lookup_indirect_table (struct inode_disk *data, int mapping, bool write)
 }
 
 /* Find the corresponding sector in sparse file 
-   using the given sector mapping from the doubly indirect block. */
+   using the given sector mapping in the doubly indirect block. */
 static block_sector_t
 lookup_double_indirect_table (struct inode_disk *data, int mapping, bool write)
 {
@@ -260,7 +263,7 @@ inode_init (void)
    Returns true if successful.
    Returns false if memory or disk allocation fails. */
 bool
-inode_create (block_sector_t sector, off_t length)
+inode_create (block_sector_t sector, off_t length, int is_dir)
 {
   bool success = false;
 
@@ -278,6 +281,7 @@ inode_create (block_sector_t sector, off_t length)
   disk_inode->indirect = -1;
   disk_inode->double_indirect = -1;
   disk_inode->length = length;
+  disk_inode->is_dir = is_dir;
   cache_put_block (block);
 
   if (length > 0)
@@ -545,6 +549,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
       bytes_written += chunk_size;
     }
 
+  /* Update the length of the file if extended. */
   struct cache_block *block = cache_get_block (inode->sector, true);
   struct inode_disk *data = (struct inode_disk *) cache_read_block (block);
   if (data->length < offset)
@@ -586,4 +591,15 @@ inode_length (const struct inode *inode)
   off_t length = data->length;
   cache_put_block (block);
   return length;
+}
+
+/* Checks if the given inode is a directory. */
+bool
+inode_is_dir (const struct inode *inode)
+{
+  struct cache_block *block = cache_get_block (inode->sector, false);
+  struct inode_disk *data = (struct inode_disk *) cache_read_block (block);
+  int is_dir = data->is_dir;
+  cache_put_block (block);
+  return is_dir == 1;
 }

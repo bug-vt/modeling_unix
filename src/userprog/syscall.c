@@ -17,6 +17,7 @@
 #include <lib/string.h>
 #include <threads/synch.h>
 #include "threads/palloc.h"
+#include "filesys/directory.h"
 
 #define WORD_SIZE 4
 #define SYSCALL1 WORD_SIZE 
@@ -38,6 +39,11 @@ static int sys_write (int fd, const void *buffer, unsigned size);
 static void sys_seek (int fd, unsigned position);
 static unsigned sys_tell (int fd);
 static void sys_close (int fd);
+static bool sys_chdir (const char *dir);
+static bool sys_mkdir (const char *dir);
+static bool sys_readdir (int fd, char *name);
+static bool sys_isdir (int fd);
+static int sys_inumber (int fd);
 
 static struct file *get_file_from_fd (int fd);
 static int set_next_fd (struct file *file);
@@ -64,7 +70,8 @@ syscall_handler (struct intr_frame *f)
   void *stack_arg_addr = f->esp + WORD_SIZE; /* Starting address of the arguments
                                                 in stack */
   struct thread *cur = thread_current ();
-  cur->syscall_arg = palloc_get_page (PAL_ZERO); /* Will hold copy of the user-provied file name */
+  /* Store copy of the user-provided file name */
+  cur->syscall_arg = palloc_get_page (PAL_ZERO); 
   char *file_name = cur->syscall_arg;
   if (cur->syscall_arg == NULL)
     sys_exit (-1);
@@ -155,6 +162,39 @@ syscall_handler (struct intr_frame *f)
           sys_close (args[0]);
           break;
         }
+      case SYS_CHDIR:
+        {
+          copy_from_user (&args, stack_arg_addr, SYSCALL1);
+          str_copy_from_user (file_name, (char *) args[0]);
+          f->eax = sys_chdir (file_name);
+          break;
+        }
+      case SYS_MKDIR:
+        {
+          copy_from_user (&args, stack_arg_addr, SYSCALL1);
+          str_copy_from_user (file_name, (char *) args[0]);
+          f->eax = sys_mkdir (file_name);
+          break;
+        }
+      case SYS_READDIR:
+        {
+          copy_from_user (&args, stack_arg_addr, SYSCALL2);
+          str_copy_from_user (file_name, (char *) args[1]);
+          f->eax = sys_readdir (args[0], file_name);
+          break;
+        }
+      case SYS_ISDIR:
+        {
+          copy_from_user (&args, stack_arg_addr, SYSCALL1);
+          f->eax = sys_isdir (args[0]);
+          break;
+        }
+      case SYS_INUMBER:
+        {
+          copy_from_user (&args, stack_arg_addr, SYSCALL1);
+          f->eax = sys_inumber (args[0]);
+          break;
+        }
     }
 
   palloc_free_page (cur->syscall_arg);
@@ -200,7 +240,8 @@ str_copy_from_user (char *dst, const char *user)
   int index = 0;
   do
     {
-      /* Prevent buffer overflow attacks. */
+      /* Limit user provided file name + arguments to be less than
+         or equal to one page (4096 bytes).*/
       if (index >= PGSIZE)
         sys_exit (-1);
 
@@ -282,8 +323,7 @@ sys_wait(uint32_t pid)
 static bool
 sys_create(const char *file, unsigned initial_size)
 {
-  bool val = filesys_create (file, initial_size);
-  return val;
+  return filesys_create (file, initial_size, false);
 }
 
 /* System call for removing */
@@ -352,6 +392,9 @@ sys_read(int fd, void *buffer, unsigned size)
 static int
 sys_write(int fd, const void *buffer, unsigned size)
 {
+  if (sys_isdir (fd))
+    return -1;
+
   if (fd == 1) /* writing to stdout */
     {
       putbuf (buffer, size);
@@ -433,4 +476,64 @@ set_next_fd (struct file *file)
         } 
     }
   return -1;
+}
+
+/* Changes the current working directory of the process to dir,
+   which may be relative or absolute. Returns true if
+   successful, false on failure. */
+static bool 
+sys_chdir (const char *dir)
+{
+  const char *chdir_name;
+  struct dir *chdir = dir_traverse_path (dir, &chdir_name, true); 
+  if (!chdir)
+    return false;
+  
+  thread_current ()->current_dir = chdir;
+  
+  return true;
+}
+
+/* Creates the directory name dir, which may be relative or absolute.
+   Return true if successful, false on failure.
+   Fails if dir already exists or if any directory name in dir,
+   besides the last, does not already exist. */
+static bool 
+sys_mkdir (const char *dir)
+{
+  return filesys_create (dir, 0, true);
+}
+
+/* Reads a directory entry from file descriptor fd, which must represent
+   a directory. If successful, stores the null-terminated file name
+   in name, which must have room for READDIR_MAX_LEN + 1 bytes,
+   and return true. If no entries are left in the directory, 
+   return false. */
+static bool sys_readdir (int fd UNUSED, char *name UNUSED)
+{
+  return false;
+}
+
+/* Returns true if fd represents a directory, 
+   false if it represents an ordinary file. */
+static bool sys_isdir (int fd)
+{
+  struct file *file = get_file_from_fd (fd);
+  if (file == NULL)
+    return false;
+
+  struct inode *inode = file_get_inode (file);
+  return inode_is_dir (inode);
+}
+
+/* Returns the inode number of the inode associated with fd,
+   which may represent an ordinary file or a directory. */
+static int sys_inumber (int fd)
+{
+  struct file *file = get_file_from_fd (fd);
+  if (file == NULL)
+    return -1;
+
+  struct inode *inode = file_get_inode (file);
+  return inode_get_inumber (inode);
 }

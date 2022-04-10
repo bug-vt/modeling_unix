@@ -50,7 +50,6 @@ process_execute (const char *cmd_line)
            limited to 128 bytes.
        (2) If called by exec, str_copy_from_user() make sure cmd_line is 
            less than or equal to one page. */
-
     line_copy = palloc_get_page (0);   
     if (line_copy == NULL)     
       return TID_ERROR;   

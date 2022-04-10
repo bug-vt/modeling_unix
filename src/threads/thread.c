@@ -24,6 +24,7 @@
 #include <atomic-ops.h>
 #include "lib/kernel/bitmap.h"
 #include "threads/ipi.h"
+#include "filesys/directory.h"
 
 /* Random value for struct thread's `magic' member.
    Used to detect stack overflow.  See the big comment at the top
@@ -276,7 +277,14 @@ thread_create (const char *name, int nice, thread_func *function, void *aux)
   spinlock_init (&bond->lock);
 
   t->bond = bond;
-  list_push_front (&thread_current ()->children, &t->bond->elem);
+  struct thread *parent = thread_current ();
+  list_push_front (&parent->children, &t->bond->elem);
+
+  /* Inherit parent's current directory. */
+  if (parent->current_dir == NULL)
+    t->current_dir = dir_open_root ();
+  else
+    t->current_dir = parent->current_dir;  
 
   /* Attach empty file descriptor table to the new process. */
   t->fd_table = fd_table;
@@ -729,6 +737,7 @@ init_thread (struct thread *t, const char *name, int nice)
   t->timer_stop = 0;
   list_init (&t->children);
   t->syscall_arg = NULL;
+  t->current_dir = NULL;
   t->magic = THREAD_MAGIC;
   if (cpu_can_acquire_spinlock)
     spinlock_acquire (&all_lock);
