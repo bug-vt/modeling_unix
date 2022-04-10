@@ -2,6 +2,7 @@
 #include <debug.h>
 #include "filesys/inode.h"
 #include "threads/malloc.h"
+#include "string.h"
 
 /* An open file. */
 struct file 
@@ -165,4 +166,18 @@ file_tell (struct file *file)
 {
   ASSERT (file != NULL);
   return file->pos;
+}
+
+/* Extract file name from path. */
+char *
+file_name_from_path (const char *path)
+{
+  char *file_name;
+  /* Extract file name from the path */
+  if (strchr (path, '/'))
+    file_name = strrchr (path, '/') + 1;
+  else
+    file_name = (char *) path;
+
+  return file_name;
 }

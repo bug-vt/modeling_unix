@@ -281,10 +281,8 @@ thread_create (const char *name, int nice, thread_func *function, void *aux)
   list_push_front (&parent->children, &t->bond->elem);
 
   /* Inherit parent's current directory. */
-  if (parent->current_dir == NULL)
-    t->current_dir = dir_open_root ();
-  else
-    t->current_dir = parent->current_dir;  
+  if (parent->current_dir)
+    t->current_dir = dir_reopen (parent->current_dir);
 
   /* Attach empty file descriptor table to the new process. */
   t->fd_table = fd_table;

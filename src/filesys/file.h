@@ -26,4 +26,7 @@ void file_seek (struct file *, off_t);
 off_t file_tell (struct file *);
 off_t file_length (struct file *);
 
+/* Extract file name from path. */
+char *file_name_from_path (const char *path);
+
 #endif /* filesys/file.h */

@@ -22,6 +22,7 @@ struct dir_entry
     block_sector_t inode_sector;        /* Sector number of header. */
     char name[NAME_MAX + 1];            /* Null terminated file name. */
     bool in_use;                        /* In use or free? */
+    uint32_t padding[3];                /* Padding to make entry 32 bytes */
   };
 
 /* Creates a directory with space for ENTRY_CNT entries in the
@@ -29,6 +30,7 @@ struct dir_entry
 bool
 dir_create (block_sector_t sector, size_t entry_cnt)
 {
+  ASSERT (entry_cnt * sizeof (struct dir_entry) == BLOCK_SECTOR_SIZE);
   return inode_create (sector, entry_cnt * sizeof (struct dir_entry), true);
 }
 
@@ -86,15 +88,15 @@ dir_get_inode (struct dir *dir)
   return dir->inode;
 }
 
-/* Traverse the path until reach destination directory
-   and extract file name from the path. */
+/* Traverse the path until reach destination directory. */
 struct dir *
-dir_traverse_path (const char *path, const char **file_name, bool is_dir)
+dir_traverse_path (const char *path, bool is_dir)
 {
   ASSERT (path != NULL);
   struct inode *inode = NULL;
   struct dir *dir = NULL;
   char *dir_name, *path_ptr;
+  bool rightmost_dir = false;
 
   /* Copy the given name, including path, for the file. */
   char *path_copy = palloc_get_page (0);   
@@ -102,38 +104,41 @@ dir_traverse_path (const char *path, const char **file_name, bool is_dir)
     return NULL;   
   strlcpy (path_copy, path, PGSIZE);
 
-  /* Extract file name from the path
-     and name of outermost directory. */
+  /* Extract file name from the path */
+  char *file_name;
   if (strchr (path, '/'))
-    {
-      *file_name = strrchr (path, '/') + 1;
-      dir_name = strtok_r ((char *) path_copy, "/", &path_ptr); 
-    }
+    file_name = strrchr (path_copy, '/') + 1;
   else
-    {
-      *file_name = path;
-      dir_name = (char *) path;
-    }
+    file_name = (char *) path;
 
-  /* Distinguish between absolute path or relative path. */
-  if (false /* Insert condition for relative path */)
-    dir = thread_current ()->current_dir;
+  /* Extract name of outermost (leftmost) directory. */
+  if (strchr (path, '/'))
+    dir_name = strtok_r ((char *) path_copy, "/", &path_ptr); 
   else
+    dir_name = (char *) path;
+
+  struct thread *cur = thread_current ();
+  /* Distinguish between absolute path or relative path. */
+  if (strchr (path_copy, '/') || cur->current_dir == NULL)
     dir = dir_open_root ();
+  else
+    dir = cur->current_dir;
 
   ASSERT (dir_name != NULL); 
   /* Iterate over the path until reach destination directory. */
-  for (; dir_name != NULL; dir_name = strtok_r (NULL, "/", &path_ptr))     
+  for (; dir_name != NULL && !rightmost_dir; dir_name = strtok_r (NULL, "/", &path_ptr))     
     {
       if (!dir)
-        {
-          palloc_free_page (path_copy);
-          return NULL;
-        }
+        goto traverse_done;
 
       /* Reached destination. */
-      if (!strcmp(dir_name, *file_name) && !is_dir)
-        break;
+      if (dir_name == file_name)
+      {
+        if (is_dir)
+          rightmost_dir = true;
+        else
+          break;
+      }
 
       inode_close (inode);
       if (!dir_lookup (dir, dir_name, &inode))
@@ -144,10 +149,10 @@ dir_traverse_path (const char *path, const char **file_name, bool is_dir)
         }
 
       /* Move to next directory. */
-      dir_close (dir);
       dir = dir_open (inode);
     }
 
+traverse_done:
   palloc_free_page (path_copy);
   return dir;
 }

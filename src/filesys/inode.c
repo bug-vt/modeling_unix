@@ -287,6 +287,7 @@ inode_create (block_sector_t sector, off_t length, int is_dir)
   if (length > 0)
     {
       static char zero[1];
+      static char zeros[BLOCK_SECTOR_SIZE];
       struct inode *inode = inode_open (sector);
       if (!inode)
         {
@@ -294,7 +295,7 @@ inode_create (block_sector_t sector, off_t length, int is_dir)
           inode_close (inode);
           goto create_done;
         }
-      /* Extend the file length from 0 to length by writing 1 byte at the end. */
+      /* Extend the file length from 0 to length by writing at the end. */
       bool written = inode_write_at (inode, zero, 1, length - 1) == 1;
       if (!written)
         {

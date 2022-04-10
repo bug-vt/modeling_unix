@@ -484,12 +484,11 @@ set_next_fd (struct file *file)
 static bool 
 sys_chdir (const char *dir)
 {
-  const char *chdir_name;
-  struct dir *chdir = dir_traverse_path (dir, &chdir_name, true); 
+  struct dir *chdir = dir_traverse_path (dir, true); 
   if (!chdir)
     return false;
   
-  thread_current ()->current_dir = chdir;
+  thread_current ()->current_dir = dir_reopen (chdir);
   
   return true;
 }
