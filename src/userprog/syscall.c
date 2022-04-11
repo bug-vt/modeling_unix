@@ -18,6 +18,7 @@
 #include <threads/synch.h>
 #include "threads/palloc.h"
 #include "filesys/directory.h"
+#include "lib/user/syscall.h"
 
 #define WORD_SIZE 4
 #define SYSCALL1 WORD_SIZE 
@@ -180,8 +181,8 @@ syscall_handler (struct intr_frame *f)
       case SYS_READDIR:
         {
           copy_from_user (&args, stack_arg_addr, SYSCALL2);
-          str_copy_from_user (file_name, (char *) args[1]);
-          f->eax = sys_readdir (args[0], file_name);
+          validate_buffer ((void *) args[1], READDIR_MAX_LEN + 1);
+          f->eax = sys_readdir (args[0], (char *) args[1]);
           break;
         }
       case SYS_ISDIR:
@@ -444,6 +445,7 @@ sys_close(int fd)
   
   file_close (cur->fd_table->fd_to_file[fd]);
   cur->fd_table->fd_to_file[fd] = NULL;
+  cur->fd_table->fd_to_dir[fd] = NULL;
 }
 
 /* Obtains a file from file descriptor */
@@ -475,19 +477,19 @@ set_next_fd (struct file *file)
   struct thread *cur = thread_current ();
   struct inode *inode = file_get_inode (file);
 
-  struct dir **fd_dir_table = cur->fd_table->fd_to_dir;
-  struct file **fd_file_table = cur->fd_table->fd_to_file;
+  struct dir **fd_to_dir = cur->fd_table->fd_to_dir;
+  struct file **fd_to_file = cur->fd_table->fd_to_file;
 
   for (int fd = 2; fd < FD_MAX; fd++)
     {
-      if (!fd_file_table[fd])
+      if (!fd_to_file[fd])
         {
-          /* If the file is directory, record additonally to
+          /* If the file is directory, record additionally to
              open directory table. */
           if (inode_is_dir (inode))
-            fd_dir_table[fd] = dir_open (inode);
+            fd_to_dir[fd] = dir_open (inode);
 
-          fd_file_table[fd] = file;
+          fd_to_file[fd] = file;
 
           return fd;
         } 
