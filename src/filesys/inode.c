@@ -287,7 +287,6 @@ inode_create (block_sector_t sector, off_t length, int is_dir)
   if (length > 0)
     {
       static char zero[1];
-      static char zeros[BLOCK_SECTOR_SIZE];
       struct inode *inode = inode_open (sector);
       if (!inode)
         {
@@ -603,4 +602,11 @@ inode_is_dir (const struct inode *inode)
   int is_dir = data->is_dir;
   cache_put_block (block);
   return is_dir == 1;
+}
+
+/* Check if the given inode have been removed. */
+bool
+inode_is_removed (const struct inode *inode)
+{
+  return inode->removed;
 }

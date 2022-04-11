@@ -122,9 +122,12 @@ dir_traverse_path (const char *path, bool is_dir)
   if (strchr (path_copy, '/') || cur->current_dir == NULL)
     dir = dir_open_root ();
   else
-    dir = cur->current_dir;
+    {
+      dir = cur->current_dir;
+      if (inode_is_removed (dir_get_inode (cur->current_dir)))
+        dir = NULL;
+    }
 
-  ASSERT (dir_name != NULL); 
   /* Iterate over the path until reach destination directory. */
   for (; dir_name != NULL && !rightmost_dir; dir_name = strtok_r (NULL, "/", &path_ptr))     
     {
@@ -275,6 +278,19 @@ dir_remove (struct dir *dir, const char *name)
   if (inode == NULL)
     goto done;
 
+  /* If it is directory, remove only when it is empty. */
+  if (inode_is_dir (inode))
+    {
+      struct dir_entry e;
+      off_t ofs;
+      /* Ignore first two directory entries ("." and "..") */
+      for (ofs = sizeof e * 2; inode_read_at (inode, &e, sizeof e, ofs) == sizeof e;
+           ofs += sizeof e) 
+        {
+          if (e.in_use)
+            goto done;
+        }
+    }
   /* Erase directory entry. */
   e.in_use = false;
   if (inode_write_at (dir->inode, &e, sizeof e, ofs) != sizeof e) 
@@ -296,6 +312,9 @@ bool
 dir_readdir (struct dir *dir, char name[NAME_MAX + 1])
 {
   struct dir_entry e;
+  /* Ignore first two directory entries ("." and "..") */
+  if (dir->pos == 0)
+    dir->pos += sizeof e * 2;
 
   while (inode_read_at (dir->inode, &e, sizeof e, dir->pos) == sizeof e) 
     {

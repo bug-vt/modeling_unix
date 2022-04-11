@@ -487,7 +487,7 @@ sys_chdir (const char *dir)
   struct dir *chdir = dir_traverse_path (dir, true); 
   if (!chdir)
     return false;
-  
+ 
   thread_current ()->current_dir = dir_reopen (chdir);
   
   return true;
@@ -508,9 +508,16 @@ sys_mkdir (const char *dir)
    in name, which must have room for READDIR_MAX_LEN + 1 bytes,
    and return true. If no entries are left in the directory, 
    return false. */
-static bool sys_readdir (int fd UNUSED, char *name UNUSED)
+static bool sys_readdir (int fd, char *name)
 {
-  return false;
+  if (!sys_isdir (fd))
+    return false;
+
+  struct file *file = get_file_from_fd (fd);
+  struct inode *inode = file_get_inode (file);
+  struct dir *dir = dir_open (inode);
+   
+  return dir_readdir (dir, name);
 }
 
 /* Returns true if fd represents a directory, 
