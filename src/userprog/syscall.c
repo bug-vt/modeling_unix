@@ -323,7 +323,7 @@ sys_wait(uint32_t pid)
 static bool
 sys_create(const char *file, unsigned initial_size)
 {
-  return filesys_create (file, initial_size, false);
+  return filesys_create (file, initial_size);
 }
 
 /* System call for removing */
@@ -500,7 +500,7 @@ sys_chdir (const char *dir)
 static bool 
 sys_mkdir (const char *dir)
 {
-  return filesys_create (dir, 0, true);
+  return filesys_dir_create (dir, 16);
 }
 
 /* Reads a directory entry from file descriptor fd, which must represent
