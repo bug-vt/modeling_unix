@@ -141,7 +141,6 @@ dir_traverse_path (const char *path, bool is_dir)
           break;
       }
 
-      inode_close (inode);
       if (!dir_lookup (dir, dir_name, &inode))
         {
           dir_close (dir);
@@ -149,8 +148,13 @@ dir_traverse_path (const char *path, bool is_dir)
           return NULL;
         }
 
-      /* Move to next directory. */
-      dir = dir_open (inode);
+      /* Close the current directory and move to the next directory. */
+      struct dir *next_dir = dir_open (inode);
+      dir_close (dir);
+      dir = next_dir;
+
+      if (!path_ptr)
+        break;
     }
 
 traverse_done:

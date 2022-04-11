@@ -13,6 +13,7 @@ rw_lock_init (struct rw_lock *rw_lock)
   cond_init (&rw_lock->can_write);
   rw_lock->pending_readers = 0;
   rw_lock->pending_writer = false;
+  rw_lock->reader_next = false;
   rw_lock->mode = UNLOCKED;
 }
 
@@ -26,8 +27,11 @@ read_lock_acquire (struct rw_lock *rw_lock)
   lock_acquire (&rw_lock->monitor_lock);
 
   /* If a writer is holding a lock or if there are pending writers,
-     then put the reader into a pending list. */
-  while (rw_lock->num_writers > 0 || rw_lock->pending_writer)
+     then put the reader into a pending list. 
+     On the other hand, if one of the writer woke them up, then
+     it must be reader's turn to hold the lock. */
+  while ((rw_lock->num_writers > 0 || rw_lock->pending_writer) 
+         && !rw_lock->reader_next)
     {
       rw_lock->pending_readers++;
       cond_wait (&rw_lock->can_read, &rw_lock->monitor_lock);
@@ -48,6 +52,7 @@ read_lock_release (struct rw_lock *rw_lock)
   lock_acquire (&rw_lock->monitor_lock);
 
   rw_lock->num_readers--;
+  rw_lock->reader_next = false;
   /* Wake up one of the writers if any. The followings are possible:
      (1) The last reader: 
          A writer will take turn next.
@@ -68,9 +73,11 @@ write_lock_acquire (struct rw_lock *rw_lock)
 {
   lock_acquire (&rw_lock->monitor_lock);
 
-  /* Checks if any readers or another writer is already holding the lock. 
+  /* Checks if any readers or another writer is already holding the lock.
+     Also, checks if it is reader's turn to hold the lock.
      In any of those cases, put the writer into a pending list. */
-  while (rw_lock->num_readers > 0 || rw_lock->num_writers > 0)
+  while (rw_lock->num_readers > 0 || rw_lock->num_writers > 0 
+         || rw_lock->reader_next)
     {
       rw_lock->pending_writer = true;
       cond_wait (&rw_lock->can_write, &rw_lock->monitor_lock);
@@ -96,7 +103,8 @@ write_lock_try_acquire (struct rw_lock *rw_lock)
   lock_acquire (&rw_lock->monitor_lock);
 
   /* Checks if any readers or another writer is already holding the lock. */
-  if (rw_lock->num_readers > 0 || rw_lock->num_writers > 0)
+  if (rw_lock->num_readers > 0 || rw_lock->num_writers > 0
+      || rw_lock->reader_next)
     return false;
 
   rw_lock->num_writers++;
@@ -121,7 +129,8 @@ write_lock_release (struct rw_lock *rw_lock)
   /* Otherwise, wake up all pending readers. */
   else
     {
-      rw_lock->pending_writer = false;
+      /* Make sure next reader would go next. */
+      rw_lock->reader_next = true;
       cond_broadcast (&rw_lock->can_read, &rw_lock->monitor_lock);
     }
 

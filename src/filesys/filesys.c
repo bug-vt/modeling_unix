@@ -37,8 +37,8 @@ filesys_init (bool format)
 void
 filesys_done (void) 
 {
-  free_map_close ();
   cache_flush ();
+  free_map_close ();
 }
 
 /* Create a directory named given from the path with the given
@@ -151,7 +151,6 @@ filesys_remove (const char *path)
   struct dir *dir = dir_traverse_path (path, false);
 
   bool success = dir != NULL && dir_remove (dir, file_name);
-  dir_close (dir); 
 
   return success;
 }
