@@ -180,12 +180,15 @@ process_exit (void)
   printf("%s: exit(%d)\n", cur->name, status);
 
   /* Closes all open file descriptors and free the fd table. */
-  for (int fd = 2; fd < 1024; fd++)
+  for (int fd = 2; fd < FD_MAX; fd++)
     {
       if (cur->fd_table->fd_to_file[fd] != NULL)
         {
           file_close (cur->fd_table->fd_to_file[fd]);
+          if (cur->fd_table->fd_to_dir[fd] != NULL)
+            dir_close (cur->fd_table->fd_to_dir[fd]);
         }
+
     }
   palloc_free_page (cur->fd_table);
 

@@ -100,7 +100,6 @@ filesys_create (const char *path, off_t initial_size)
   if (!success && inode_sector != 0) 
     free_map_release (inode_sector, 1);
   
-  dir_close (dir);
   return success;
 }
 
@@ -131,7 +130,6 @@ filesys_open (const char *path)
       if (!dir_lookup (dir, file_name, &inode))
         return NULL;
 
-      dir_close (dir);
       return file_open (inode);
     }
 
@@ -162,9 +160,13 @@ filesys_remove (const char *path)
 static void
 do_format (void)
 {
+  struct dir *root_dir;
   printf ("Formatting file system...");
   free_map_create ();
-  if (!dir_create (ROOT_DIR_SECTOR, 16))
+  if (!dir_create (ROOT_DIR_SECTOR, 0)
+      && (root_dir = dir_open_root ())
+      && dir_add (root_dir, ".", ROOT_DIR_SECTOR)
+      && dir_add (root_dir, "..", ROOT_DIR_SECTOR))
     PANIC ("root directory creation failed");
   free_map_close ();
   printf ("done.\n");

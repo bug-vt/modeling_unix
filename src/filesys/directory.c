@@ -30,7 +30,6 @@ struct dir_entry
 bool
 dir_create (block_sector_t sector, size_t entry_cnt)
 {
-  ASSERT (entry_cnt * sizeof (struct dir_entry) == BLOCK_SECTOR_SIZE);
   return inode_create (sector, entry_cnt * sizeof (struct dir_entry), true);
 }
 

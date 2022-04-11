@@ -46,6 +46,7 @@ static bool sys_isdir (int fd);
 static int sys_inumber (int fd);
 
 static struct file *get_file_from_fd (int fd);
+static struct dir *get_dir_from_fd (int fd);
 static int set_next_fd (struct file *file);
 static void validate_ptr (const void *addr);
 static void validate_buffer (void *buffer, unsigned size);
@@ -340,14 +341,12 @@ sys_open(const char* filename)
 {
   struct file *file = filesys_open (filename);
   if (file == NULL)
-    {
-      return -1;
-    }
+    return -1;
+
   int fd = set_next_fd (file);
   if (fd == -1)
-    {
-      file_close (file);
-    }
+    file_close (file);
+
   return fd;
 }
 
@@ -392,9 +391,6 @@ sys_read(int fd, void *buffer, unsigned size)
 static int
 sys_write(int fd, const void *buffer, unsigned size)
 {
-  if (sys_isdir (fd))
-    return -1;
-
   if (fd == 1) /* writing to stdout */
     {
       putbuf (buffer, size);
@@ -402,7 +398,7 @@ sys_write(int fd, const void *buffer, unsigned size)
     }
 
   struct file *file = get_file_from_fd (fd);
-  if (file == NULL)
+  if (file == NULL || get_dir_from_fd (fd) != NULL)
     return -1;
 
   int written = file_write (file, buffer, size);
@@ -454,10 +450,20 @@ sys_close(int fd)
 static struct file *
 get_file_from_fd (int fd)
 {
-  if (fd < 0 || fd >= 1024)
+  if (fd < 0 || fd >= FD_MAX)
     return NULL;
 
   return thread_current ()->fd_table->fd_to_file[fd];
+}
+
+/* Obtains a directory from file descriptor */
+static struct dir *
+get_dir_from_fd (int fd)
+{
+  if (fd < 0 || fd >= FD_MAX)
+    return NULL;
+
+  return thread_current ()->fd_table->fd_to_dir[fd];
 }
 
 /* Finds the next available file descriptor mapping and
@@ -466,12 +472,23 @@ get_file_from_fd (int fd)
 static int
 set_next_fd (struct file *file)
 {
-  struct file **fd_table = thread_current ()->fd_table->fd_to_file;
-  for (int fd = 2; fd < 1024; fd++)
+  struct thread *cur = thread_current ();
+  struct inode *inode = file_get_inode (file);
+
+  struct dir **fd_dir_table = cur->fd_table->fd_to_dir;
+  struct file **fd_file_table = cur->fd_table->fd_to_file;
+
+  for (int fd = 2; fd < FD_MAX; fd++)
     {
-      if (!fd_table[fd])
+      if (!fd_file_table[fd])
         {
-          fd_table[fd] = file;
+          /* If the file is directory, record additonally to
+             open directory table. */
+          if (inode_is_dir (inode))
+            fd_dir_table[fd] = dir_open (inode);
+
+          fd_file_table[fd] = file;
+
           return fd;
         } 
     }
@@ -500,7 +517,7 @@ sys_chdir (const char *dir)
 static bool 
 sys_mkdir (const char *dir)
 {
-  return filesys_dir_create (dir, 16);
+  return filesys_dir_create (dir, 0);
 }
 
 /* Reads a directory entry from file descriptor fd, which must represent
@@ -510,12 +527,9 @@ sys_mkdir (const char *dir)
    return false. */
 static bool sys_readdir (int fd, char *name)
 {
-  if (!sys_isdir (fd))
+  struct dir *dir = get_dir_from_fd (fd);
+  if (dir == NULL)
     return false;
-
-  struct file *file = get_file_from_fd (fd);
-  struct inode *inode = file_get_inode (file);
-  struct dir *dir = dir_open (inode);
    
   return dir_readdir (dir, name);
 }
@@ -524,12 +538,11 @@ static bool sys_readdir (int fd, char *name)
    false if it represents an ordinary file. */
 static bool sys_isdir (int fd)
 {
-  struct file *file = get_file_from_fd (fd);
-  if (file == NULL)
+  struct dir *dir = get_dir_from_fd (fd);
+  if (dir == NULL)
     return false;
 
-  struct inode *inode = file_get_inode (file);
-  return inode_is_dir (inode);
+  return true;
 }
 
 /* Returns the inode number of the inode associated with fd,
