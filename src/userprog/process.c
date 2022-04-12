@@ -172,6 +172,7 @@ process_exit (void)
       pagedir_destroy (pd);
     }
 
+  /* Free copy of the user provided argument. */
   if (cur->syscall_arg != NULL)
     palloc_free_page (cur->syscall_arg);
 
@@ -195,6 +196,8 @@ process_exit (void)
   /* Close the executable that was running on exiting process.
      This re-enable the write permission. */
   file_close (cur->file);
+  /* Close the current working directory */
+  dir_close (cur->current_dir);
 
   /* Remove children list and reap zombie children if any. 
      Otherwise, make the alive children to orphan. */

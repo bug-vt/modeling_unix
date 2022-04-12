@@ -314,14 +314,12 @@ bool
 dir_readdir (struct dir *dir, char name[NAME_MAX + 1])
 {
   struct dir_entry e;
-  /* Ignore first two directory entries ("." and "..") */
-  if (dir->pos == 0)
-    dir->pos += sizeof e * 2;
 
   while (inode_read_at (dir->inode, &e, sizeof e, dir->pos) == sizeof e) 
     {
       dir->pos += sizeof e;
-      if (e.in_use)
+      /* Ignore "." and ".." directory entries */
+      if (e.in_use && strcmp (e.name, ".") && strcmp (e.name, ".."))
         {
           strlcpy (name, e.name, NAME_MAX + 1);
           return true;

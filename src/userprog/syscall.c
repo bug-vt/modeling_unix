@@ -444,6 +444,7 @@ sys_close(int fd)
     }
   
   file_close (cur->fd_table->fd_to_file[fd]);
+  dir_close (cur->fd_table->fd_to_dir[fd]);
   cur->fd_table->fd_to_file[fd] = NULL;
   cur->fd_table->fd_to_dir[fd] = NULL;
 }
