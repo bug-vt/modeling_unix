@@ -7,9 +7,9 @@
 #include "string.h"
 #include "threads/thread.h"
 #include "stdio.h"
+#include "devices/timer.h"
+#include "lib/kernel/queue.h"
 
-
-static struct lock cache_lock;
 
 struct cache_block
 {
@@ -22,11 +22,15 @@ struct cache_block
   struct rw_lock rw_lock;
 };
 
+struct list buffer_cache;
+struct list free_cache;
+struct lock cache_lock;
+struct array_queue read_queue;
+
 
 static bool block_init (struct cache_block *block);
 static struct cache_block * evict_LRU_block (block_sector_t sector);
 static struct cache_block * cache_lookup (block_sector_t sector);
-static void cache_readahead_daemon (void);
 
 
 static bool 
@@ -55,6 +59,7 @@ cache_init (void)
   lock_init (&cache_lock);
   list_init (&buffer_cache);
   list_init (&free_cache);
+  queue_init (&read_queue, MAX_CACHE_SIZE, true);
 
   for (int n = 0; n < MAX_CACHE_SIZE; n++)
     {
@@ -89,7 +94,7 @@ cache_get_block (block_sector_t sector, bool exclusive)
       if (block == NULL)
         {
           /* When cache is full, select Least recently used block. */
-          if (list_size (&buffer_cache) == MAX_CACHE_SIZE)
+          if (list_empty (&free_cache))
             block = evict_LRU_block (sector);
 
           /* Otherwise, use available empty block. */
@@ -248,13 +253,51 @@ cache_lookup (block_sector_t sector)
   return block;
 }
 
-/*  */
-static void
-cache_readahead_daemon (void)
+/* Pre-fetch next block to be accessed into buffer cache before
+   it's accessed. */
+void cache_read_ahead (block_sector_t sector)
 {
-  ;
+  /* Check if the next block to be accessed is valid. */
+  if ((int32_t) sector < 0)
+    return;
+
+  block_sector_t *next_sector = malloc (sizeof (block_sector_t));
+  if (next_sector == NULL)
+    return;
+
+  *next_sector = sector;
+  queue_enqueue (&read_queue, next_sector);
 }
 
+/* Pre-fetch specified blocks from the queue upon signal.
+   This should be done asynchronously in the background. */
+void
+cache_read_ahead_daemon (void *unused UNUSED)
+{
+  while (true)
+    {
+      block_sector_t *sector = (block_sector_t *) queue_dequeue (&read_queue);
+     
+      struct cache_block *block = cache_get_block (*sector, false);
+      cache_read_block (block);
+      cache_put_block (block);
+      
+      free (sector);
+    }
+}
+
+/* Periodically write all dirty blocks inside buffer cache to disk. 
+   This should be done asynchronously in the background. */
+void
+cache_write_behind_daemon (void *unused UNUSED)
+{
+  while (true)
+    {
+      timer_sleep (1000);
+    }
+}
+
+/* Write back all dirty blocks inside buffer cache to disk. */
 void
 cache_flush (void)
 {
@@ -263,9 +306,10 @@ cache_flush (void)
     { 
       struct cache_block *block = list_entry (e, struct cache_block, elem);
       if (block->dirty)
-        block_write (fs_device, block->sector, block->data);
-      block->valid = false; 
-      block->dirty = false;
+        {
+          block_write (fs_device, block->sector, block->data);
+          block->dirty = false;
+        }
     }
 }
 

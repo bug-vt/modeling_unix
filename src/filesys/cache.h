@@ -7,8 +7,6 @@
 
 #define MAX_CACHE_SIZE 64
 
-struct list buffer_cache;
-struct list free_cache;
 struct cache_block;
 
 
@@ -18,7 +16,9 @@ void cache_put_block (struct cache_block *);
 void *cache_read_block (struct cache_block *);
 void *cache_zero_block (struct cache_block *);
 void cache_mark_block_dirty (struct cache_block *);
-// void cache_read_ahead (sector);
+void cache_read_ahead (block_sector_t);
+void cache_read_ahead_daemon (void *);
+void cache_write_behind_daemon (void *);
 void cache_flush (void);
 
 #endif  /* filesys/cache.h */

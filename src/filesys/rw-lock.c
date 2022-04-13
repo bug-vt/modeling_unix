@@ -105,7 +105,10 @@ write_lock_try_acquire (struct rw_lock *rw_lock)
   /* Checks if any readers or another writer is already holding the lock. */
   if (rw_lock->num_readers > 0 || rw_lock->num_writers > 0
       || rw_lock->reader_next)
-    return false;
+    {
+      lock_release (&rw_lock->monitor_lock);
+      return false;
+    }
 
   rw_lock->num_writers++;
 
