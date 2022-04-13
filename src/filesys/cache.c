@@ -293,7 +293,8 @@ cache_write_behind_daemon (void *unused UNUSED)
 {
   while (true)
     {
-      timer_sleep (1000);
+      timer_sleep (5000);
+      cache_flush ();
     }
 }
 
@@ -305,10 +306,11 @@ cache_flush (void)
        e != list_end (&buffer_cache); e = list_next (e)) 
     { 
       struct cache_block *block = list_entry (e, struct cache_block, elem);
-      if (block->dirty)
+      if (write_lock_try_acquire (&block->rw_lock) && block->dirty)
         {
           block_write (fs_device, block->sector, block->data);
           block->dirty = false;
+          write_lock_release (&block->rw_lock);
         }
     }
 }

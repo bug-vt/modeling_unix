@@ -32,6 +32,7 @@ filesys_init (bool format)
 
   free_map_open ();
   thread_create ("read-ahead", NICE_DEFAULT, cache_read_ahead_daemon, NULL);
+  thread_create ("write-behind", NICE_DEFAULT, cache_write_behind_daemon, NULL);
 }
 
 /* Shuts down the file system module, writing any unwritten data
