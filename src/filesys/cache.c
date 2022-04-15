@@ -19,13 +19,15 @@ struct cache_block
   bool valid;                   /* Indicate cached status of the block. */
   void *data;                   /* 512 bytes of block data on disk. */
 
-  struct rw_lock rw_lock;
+  struct rw_lock rw_lock;       /* Read-write lock (shared-exclusive lock). */
 };
 
-struct list buffer_cache;
-struct list free_cache;
+struct list buffer_cache;       /* Cached blocks. */
+struct list free_cache;         /* Free blocks. Only used before cache become full. 
+                                   Note that size of buffer_cache + free_cache 
+                                   is always 64. */
 struct lock cache_lock;
-struct array_queue read_queue;
+struct array_queue read_queue;  /* Queue used for read-ahead daemon. */
 
 
 static bool block_init (struct cache_block *block);
@@ -33,6 +35,7 @@ static struct cache_block * evict_LRU_block (block_sector_t sector);
 static struct cache_block * cache_lookup (block_sector_t sector);
 
 
+/* Initialize empty block. */
 static bool 
 block_init (struct cache_block *block)
 {
@@ -61,6 +64,7 @@ cache_init (void)
   list_init (&free_cache);
   queue_init (&read_queue, MAX_CACHE_SIZE, true);
 
+  /* Initialize 64 empty cache blocks. */
   for (int n = 0; n < MAX_CACHE_SIZE; n++)
     {
       struct cache_block *block = malloc (sizeof (struct cache_block));
@@ -193,6 +197,8 @@ evict_LRU_block (block_sector_t sector)
 void
 cache_put_block (struct cache_block *block)
 {
+  ASSERT (block != NULL);
+
   if (block->rw_lock.mode == WRITE_LOCKED)
     write_lock_release (&block->rw_lock);
   else if (block->rw_lock.mode == READ_LOCKED)
@@ -302,8 +308,8 @@ cache_write_behind_daemon (void *unused UNUSED)
 void
 cache_flush (void)
 {
-  for (struct list_elem *e = list_begin (&buffer_cache); 
-       e != list_end (&buffer_cache); e = list_next (e)) 
+  for (struct list_elem *e = list_rbegin (&buffer_cache); 
+       e != list_rend (&buffer_cache);) 
     { 
       struct cache_block *block = list_entry (e, struct cache_block, elem);
       /* Write back only dirty block. */
@@ -312,7 +318,7 @@ cache_flush (void)
           if (write_lock_try_acquire (&block->rw_lock))
             {
               /* Checks whether block has been evicted while acquiring the lock. */
-              if (block->valid)
+              if (block->valid && block->dirty)
                 {
                   block_write (fs_device, block->sector, block->data);
                   block->dirty = false;
@@ -320,6 +326,10 @@ cache_flush (void)
               write_lock_release (&block->rw_lock);
             }
         }
+
+      lock_acquire (&cache_lock);
+      e = list_prev (e);
+      lock_release (&cache_lock);
     }
 }
 

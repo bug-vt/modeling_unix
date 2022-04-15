@@ -26,9 +26,9 @@ struct inode_disk
                                            0 = File
                                            1 = Directory */
     unsigned magic;                     /* Magic number. */
-    block_sector_t direct[NUM_DIRECT];
-    block_sector_t indirect;
-    block_sector_t double_indirect;
+    block_sector_t direct[NUM_DIRECT];  /* Direct table. */
+    block_sector_t indirect;            /* Indirect table. */
+    block_sector_t double_indirect;     /* Doubly indirect table. */
   };
 
 static block_sector_t lookup_direct_table (struct inode_disk *, int, bool);
@@ -52,8 +52,7 @@ struct inode
     int open_cnt;                       /* Number of openers. */
     bool removed;                       /* True if deleted, false otherwise. */
     int deny_write_cnt;                 /* 0: writes ok, >0: deny writes. */
-    struct lock dir_lock;               /* Lock for exclusive directory
-                                           access during dir_add() */
+    struct lock dir_lock;               /* Lock for exclusive directory access */
   };
 
 /* Returns the block device sector that contains byte offset POS
@@ -289,6 +288,7 @@ inode_create (block_sector_t sector, off_t length, int is_dir)
 
   struct cache_block *block = cache_get_block (sector, true);
   struct inode_disk *disk_inode = (struct inode_disk *) cache_zero_block (block);
+  /* Initialize all direct, indirect, and doubly indirect table entries to -1. */
   for (int i = 0; i < NUM_DIRECT; i++)
     disk_inode->direct[i] = -1;
 
@@ -363,6 +363,7 @@ inode_open (block_sector_t sector)
   inode->deny_write_cnt = 0;
   inode->removed = false;
   lock_init (&inode->dir_lock);
+
   struct cache_block *block = cache_get_block (inode->sector, false);
   cache_read_block (block);
   cache_put_block (block);

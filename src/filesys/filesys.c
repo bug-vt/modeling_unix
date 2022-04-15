@@ -31,6 +31,8 @@ filesys_init (bool format)
     do_format ();
 
   free_map_open ();
+  
+  /* Spawn daemon threads dedicated to read-ahead and write-behind. */
   thread_create ("read-ahead", NICE_DEFAULT, cache_read_ahead_daemon, NULL);
   thread_create ("write-behind", NICE_DEFAULT, cache_write_behind_daemon, NULL);
 }
