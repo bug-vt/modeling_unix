@@ -103,7 +103,7 @@ lookup_direct_table (struct inode_disk *data, int mapping, bool write)
   /* Locate the direct block in direct table. */
   block_sector_t sector = data->direct[mapping];
   /* Prefetch next sector */
-  if (mapping < NUM_DIRECT - 1)
+  if (!write && mapping < NUM_DIRECT - 1)
     cache_read_ahead (data->direct[mapping + 1]);
   /* Checks if reading pass the EOF or hole in sparse file. */
   if (!write && (int32_t) sector == -1)
@@ -139,7 +139,7 @@ lookup_indirect_table (struct inode_disk *data, int mapping, bool write)
   int index = mapping - NUM_DIRECT;
   block_sector_t sector = indirect_table[index];    
   /* Prefetch next sector */
-  if (index < NUM_INDIRECT - 1)
+  if (!write && index < NUM_INDIRECT - 1)
     cache_read_ahead (indirect_table[index + 1]);
   /* Checks if reading pass the EOF or hole in sparse file. */
   if (!write && (int32_t) sector == -1)
@@ -204,7 +204,7 @@ lookup_double_indirect_table (struct inode_disk *data, int mapping, bool write)
   index = (mapping - NUM_DIRECT - NUM_INDIRECT) % NUM_INDIRECT;
   block_sector_t sector = indirect_table[index];    
   /* Prefetch next sector */
-  if (index < NUM_INDIRECT - 1)
+  if (!write && index < NUM_INDIRECT - 1)
     cache_read_ahead (indirect_table[index + 1]);
   /* Checks if reading pass the EOF or hole in sparse file. */
   if (!write && (int32_t) sector == -1)
