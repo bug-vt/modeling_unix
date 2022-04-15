@@ -52,6 +52,8 @@ struct inode
     int open_cnt;                       /* Number of openers. */
     bool removed;                       /* True if deleted, false otherwise. */
     int deny_write_cnt;                 /* 0: writes ok, >0: deny writes. */
+    struct lock dir_lock;               /* Lock for exclusive directory
+                                           access during dir_add() */
   };
 
 /* Returns the block device sector that contains byte offset POS
@@ -259,12 +261,14 @@ access_indirect_block (block_sector_t indirect, bool write)
 /* List of open inodes, so that opening a single inode twice
    returns the same `struct inode'. */
 static struct list open_inodes;
+static struct lock inodes_lock;
 
 /* Initializes the inode module. */
 void
 inode_init (void) 
 {
   list_init (&open_inodes);
+  lock_init (&inodes_lock);
 }
 
 /* Initializes an inode with LENGTH bytes of data and
@@ -329,6 +333,7 @@ inode_open (block_sector_t sector)
   struct list_elem *e;
   struct inode *inode;
 
+  lock_acquire (&inodes_lock);
   /* Check whether this inode is already open. */
   for (e = list_begin (&open_inodes); e != list_end (&open_inodes);
        e = list_next (e)) 
@@ -337,9 +342,11 @@ inode_open (block_sector_t sector)
       if (inode->sector == sector) 
         {
           inode_reopen (inode);
+          lock_release (&inodes_lock);
           return inode; 
         }
     }
+  lock_release (&inodes_lock);
 
   /* Allocate memory. */
   inode = malloc (sizeof *inode);
@@ -347,11 +354,15 @@ inode_open (block_sector_t sector)
     return NULL;
 
   /* Initialize. */
+  lock_acquire (&inodes_lock);
   list_push_front (&open_inodes, &inode->elem);
+  lock_release (&inodes_lock);
+
   inode->sector = sector;
   inode->open_cnt = 1;
   inode->deny_write_cnt = 0;
   inode->removed = false;
+  lock_init (&inode->dir_lock);
   struct cache_block *block = cache_get_block (inode->sector, false);
   cache_read_block (block);
   cache_put_block (block);
@@ -387,9 +398,11 @@ inode_close (struct inode *inode)
   /* Release resources if this was the last opener. */
   if (--inode->open_cnt == 0)
     {
+      lock_acquire (&inodes_lock);
       /* Remove from inode list and release lock. */
       list_remove (&inode->elem);
- 
+      lock_release (&inodes_lock);
+
       /* Deallocate blocks if removed. */
       if (inode->removed) 
         {
@@ -619,4 +632,18 @@ bool
 inode_is_removed (const struct inode *inode)
 {
   return inode->removed;
+}
+
+/* Acquire a directory lock from the underlying inode. */
+void
+inode_lock_acquire (struct inode *inode)
+{
+  lock_acquire (&inode->dir_lock);
+}
+
+/* Release a directory lock from the underlying inode. */
+void
+inode_lock_release (struct inode *inode)
+{
+  lock_release (&inode->dir_lock);
 }

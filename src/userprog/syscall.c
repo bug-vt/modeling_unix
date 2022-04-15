@@ -380,7 +380,8 @@ sys_read(int fd, void *buffer, unsigned size)
     }
 
   struct file *file = get_file_from_fd (fd);
-  if (file == NULL)
+  /* Reject if fd is invalid or if fd is directory. */
+  if (file == NULL || get_dir_from_fd (fd) != NULL)
     return -1;
 
   int read = file_read (file, buffer, size);
@@ -399,6 +400,7 @@ sys_write(int fd, const void *buffer, unsigned size)
     }
 
   struct file *file = get_file_from_fd (fd);
+  /* Reject if fd is invalid or if fd is directory. */
   if (file == NULL || get_dir_from_fd (fd) != NULL)
     return -1;
 
