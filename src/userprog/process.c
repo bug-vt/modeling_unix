@@ -181,13 +181,13 @@ process_exit (void)
   printf("%s: exit(%d)\n", cur->name, status);
 
   /* Closes all open file descriptors and free the fd table. */
+  struct file **fd_table = cur->fd_table->fd_to_file;
   for (int fd = 2; fd < FD_MAX; fd++)
     {
-      if (cur->fd_table->fd_to_file[fd] != NULL)
+      if (fd_table[fd] != NULL)
         {
-          file_close (cur->fd_table->fd_to_file[fd]);
-          if (cur->fd_table->fd_to_dir[fd] != NULL)
-            dir_close (cur->fd_table->fd_to_dir[fd]);
+          dir_close (file_get_directory (fd_table[fd]));
+          file_close (fd_table[fd]);
         }
 
     }

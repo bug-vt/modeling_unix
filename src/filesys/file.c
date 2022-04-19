@@ -10,6 +10,7 @@ struct file
     struct inode *inode;        /* File's inode. */
     off_t pos;                  /* Current position. */
     bool deny_write;            /* Has file_deny_write() been called? */
+    struct dir *dir;            /* Additional info when file is directory. */
   };
 
 /* Opens a file for the given INODE, of which it takes ownership,
@@ -24,6 +25,7 @@ file_open (struct inode *inode)
       file->inode = inode;
       file->pos = 0;
       file->deny_write = false;
+      file->dir = NULL;
       return file;
     }
   else
@@ -180,4 +182,18 @@ file_name_from_path (const char *path)
     file_name = (char *) path;
 
   return file_name;
+}
+
+/* Indicate that the given file is a directory */
+void
+file_set_directory (struct file *file)
+{
+  file->dir = dir_open (file->inode);
+}
+
+/* Return corresponding directory if the given file is a directory */
+struct dir *
+file_get_directory (struct file *file)
+{
+  return file->dir;
 }

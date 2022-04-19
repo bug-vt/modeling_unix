@@ -2,6 +2,7 @@
 #define FILESYS_FILE_H
 
 #include "filesys/off_t.h"
+#include "filesys/directory.h"
 
 struct inode;
 
@@ -28,5 +29,9 @@ off_t file_length (struct file *);
 
 /* Extract file name from path. */
 char *file_name_from_path (const char *path);
+
+/* File type. */
+void file_set_directory (struct file *);
+struct dir *file_get_directory (struct file *);
 
 #endif /* filesys/file.h */

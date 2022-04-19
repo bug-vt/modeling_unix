@@ -47,7 +47,6 @@ static bool sys_isdir (int fd);
 static int sys_inumber (int fd);
 
 static struct file *get_file_from_fd (int fd);
-static struct dir *get_dir_from_fd (int fd);
 static int set_next_fd (struct file *file);
 static void validate_ptr (const void *addr);
 static void validate_buffer (void *buffer, unsigned size);
@@ -381,7 +380,7 @@ sys_read(int fd, void *buffer, unsigned size)
 
   struct file *file = get_file_from_fd (fd);
   /* Reject if fd is invalid or if fd is directory. */
-  if (file == NULL || get_dir_from_fd (fd) != NULL)
+  if (file == NULL || file_get_directory (file) != NULL)
     return -1;
 
   int read = file_read (file, buffer, size);
@@ -401,7 +400,7 @@ sys_write(int fd, const void *buffer, unsigned size)
 
   struct file *file = get_file_from_fd (fd);
   /* Reject if fd is invalid or if fd is directory. */
-  if (file == NULL || get_dir_from_fd (fd) != NULL)
+  if (file == NULL || file_get_directory (file) != NULL)
     return -1;
 
   int written = file_write (file, buffer, size);
@@ -445,10 +444,9 @@ sys_close(int fd)
       sys_exit (-1);
     }
   
-  file_close (cur->fd_table->fd_to_file[fd]);
-  dir_close (cur->fd_table->fd_to_dir[fd]);
+  dir_close (file_get_directory (file));
+  file_close (file);
   cur->fd_table->fd_to_file[fd] = NULL;
-  cur->fd_table->fd_to_dir[fd] = NULL;
 }
 
 /* Obtains a file from file descriptor */
@@ -461,38 +459,25 @@ get_file_from_fd (int fd)
   return thread_current ()->fd_table->fd_to_file[fd];
 }
 
-/* Obtains a directory from file descriptor */
-static struct dir *
-get_dir_from_fd (int fd)
-{
-  if (fd < 0 || fd >= FD_MAX)
-    return NULL;
-
-  return thread_current ()->fd_table->fd_to_dir[fd];
-}
-
 /* Finds the next available file descriptor mapping and
  * sets the values within it. Also checks if the file
  * can be written into. */
 static int
 set_next_fd (struct file *file)
 {
-  struct thread *cur = thread_current ();
   struct inode *inode = file_get_inode (file);
-
-  struct dir **fd_to_dir = cur->fd_table->fd_to_dir;
-  struct file **fd_to_file = cur->fd_table->fd_to_file;
+  struct file **fd_table = thread_current ()->fd_table->fd_to_file;
 
   for (int fd = 2; fd < FD_MAX; fd++)
     {
-      if (!fd_to_file[fd])
+      if (!fd_table[fd])
         {
           /* If the file is directory, record additionally to
              open directory table. */
           if (inode_is_dir (inode))
-            fd_to_dir[fd] = dir_open (inode);
+            file_set_directory (file);
 
-          fd_to_file[fd] = file;
+          fd_table[fd] = file;
 
           return fd;
         } 
@@ -532,19 +517,19 @@ sys_mkdir (const char *dir)
    return false. */
 static bool sys_readdir (int fd, char *name)
 {
-  struct dir *dir = get_dir_from_fd (fd);
-  if (dir == NULL)
+  struct file *file = get_file_from_fd (fd);
+  if (file == NULL || file_get_directory (file) == NULL)
     return false;
    
-  return dir_readdir (dir, name);
+  return dir_readdir (file_get_directory (file), name);
 }
 
 /* Returns true if fd represents a directory, 
    false if it represents an ordinary file. */
 static bool sys_isdir (int fd)
 {
-  struct dir *dir = get_dir_from_fd (fd);
-  if (dir == NULL)
+  struct file *file = get_file_from_fd (fd);
+  if (file == NULL || file_get_directory (file) == NULL)
     return false;
 
   return true;

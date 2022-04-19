@@ -25,7 +25,7 @@ typedef int tid_t;
 #define NICE_MIN -20                    /* Highest priority. */
 #define NICE_DEFAULT 0                  /* Default priority. */
 #define NICE_MAX 19                     /* Lowest priority. */
-#define FD_MAX 512                      /* File descriptor capacity per process */
+#define FD_MAX 1024                     /* File descriptor capacity per process */
 
 /* Share data between the parent and the child process. */
 struct maternal_bond 
@@ -52,7 +52,6 @@ struct fd_table
 {
   /* Array that stores the file descriptor mappings */
   struct file *fd_to_file[FD_MAX]; 
-  struct dir *fd_to_dir[FD_MAX];   
 };
 
 /* A kernel thread or user process.
