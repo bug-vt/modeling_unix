@@ -32,8 +32,11 @@ off_t file_length (struct file *);
 /* Extract file name from path. */
 char *file_name_from_path (const char *path);
 
-/* File type. */
+/* Used when file is directory. */
 void file_set_directory (struct file *);
 struct dir *file_get_directory (struct file *);
+
+/* Create pipe. */
+bool file_pipe_init (struct file *read_end, struct file *write_end);
 
 #endif /* filesys/file.h */

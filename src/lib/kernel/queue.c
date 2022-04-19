@@ -18,7 +18,7 @@ queue_init (struct array_queue *queue, size_t capacity, bool discard_mode)
   lock_init (&queue->lock);
   cond_init (&queue->items_avail);
   cond_init (&queue->slots_avail);
-  queue->buffer = malloc ((capacity + 1) * sizeof (void *));
+  queue->buffer = malloc ((capacity + 1) * sizeof (uint32_t));
   if (queue->buffer == NULL)
     {
       printf ("Array queue: fail to reserve %d elements space in kernel.", capacity);
@@ -44,15 +44,15 @@ queue_full (struct array_queue *queue)
 }
 
 /* Return the front most element in the queue. */
-void * 
+uint32_t
 queue_peek (struct array_queue *queue)
 {
   ASSERT (queue != NULL);
-  void *item = NULL;
+  uint32_t item = -1;
   lock_acquire (&queue->lock);
 
   if (!queue_empty (queue))
-    item = queue->buffer[queue->head + 1];
+    item = queue->buffer[(queue->head + 1) % queue->capacity];
 
   lock_release (&queue->lock);
 
@@ -60,7 +60,7 @@ queue_peek (struct array_queue *queue)
 }
 
 /* Pop the element from the front of the queue. */
-void * 
+uint32_t
 queue_dequeue (struct array_queue *queue)
 {
   ASSERT (queue != NULL);
@@ -71,7 +71,7 @@ queue_dequeue (struct array_queue *queue)
 
   /* Move the head to point to front element. */
   queue->head = (queue->head + 1) % queue->capacity;
-  void *item = queue->buffer[queue->head];
+  uint32_t item = queue->buffer[queue->head];
   /* Notify that there is at least one free spot inside the queue. */
   cond_signal (&queue->slots_avail, &queue->lock);
 
@@ -81,7 +81,7 @@ queue_dequeue (struct array_queue *queue)
 
 /* Push the given element to the back of the queue. */
 void
-queue_enqueue (struct array_queue *queue, void *item)
+queue_enqueue (struct array_queue *queue, uint32_t item)
 {
   ASSERT (queue != NULL);
   lock_acquire (&queue->lock);

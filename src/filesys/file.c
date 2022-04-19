@@ -5,6 +5,9 @@
 #include "string.h"
 #include <list.h>
 #include "threads/synch.h"
+#include "lib/kernel/queue.h"
+#include "stdio.h"
+
 
 static struct list open_files;
 static struct lock files_lock;
@@ -17,8 +20,21 @@ struct file
     off_t pos;                  /* Current position. */
     bool deny_write;            /* Has file_deny_write() been called? */
     int ref_count;              /* Number of referencing fd. */
-    struct dir *dir;            /* Additional info when file is directory. */
+    struct dir *dir;            /* Used when file is directory. */
+    struct pipe *pipe;          /* Used when file is Pipe. */
   };
+
+/* An open pipe */
+struct pipe
+  {
+    struct file *read_end;
+    struct file *write_end;
+    struct array_queue *queue;   
+    uint8_t ref_count;
+  };
+
+static int pipe_read (struct pipe *pipe, void *buffer, off_t size);
+static int pipe_write (struct pipe *pipe, const void *buffer, off_t size);
 
 /* Initialize open file list, keeping track of files that provide 
    layer of indirection between file descriptor and inode. */
@@ -43,6 +59,7 @@ file_open (struct inode *inode)
       file->deny_write = false;
       file->ref_count = 1;
       file->dir = NULL;
+      file->pipe = NULL;
 
       lock_acquire (&files_lock);
       list_push_front (&open_files, &file->elem);
@@ -80,7 +97,22 @@ file_close (struct file *file)
           lock_acquire (&files_lock);
           list_remove (&file->elem);
           lock_release (&files_lock);
-          free (file); 
+
+          /* Release resources for pipe if both read end and write end are
+             closed. */
+          struct pipe *pipe = file->pipe;
+          if (pipe)
+          {
+            
+            pipe->ref_count--;
+            if (pipe->ref_count == 0)
+              {
+                free (pipe->queue);
+                free (pipe);
+              }
+          }
+
+          free (file);
         }
     }
 }
@@ -100,8 +132,14 @@ file_get_inode (struct file *file)
 off_t
 file_read (struct file *file, void *buffer, off_t size) 
 {
-  off_t bytes_read = inode_read_at (file->inode, buffer, size, file->pos);
-  file->pos += bytes_read;
+  off_t bytes_read;
+  if (file->pipe)
+    bytes_read = pipe_read (file->pipe, buffer, size);
+  else
+    {
+      bytes_read = inode_read_at (file->inode, buffer, size, file->pos);
+      file->pos += bytes_read;
+    }
   return bytes_read;
 }
 
@@ -126,8 +164,14 @@ file_read_at (struct file *file, void *buffer, off_t size, off_t file_ofs)
 off_t
 file_write (struct file *file, const void *buffer, off_t size) 
 {
-  off_t bytes_written = inode_write_at (file->inode, buffer, size, file->pos);
-  file->pos += bytes_written;
+  off_t bytes_written;
+  if (file->pipe)
+    bytes_written = pipe_write (file->pipe, buffer, size);
+  else
+    {
+      bytes_written = inode_write_at (file->inode, buffer, size, file->pos);
+      file->pos += bytes_written;
+    }
   return bytes_written;
 }
 
@@ -225,4 +269,102 @@ struct dir *
 file_get_directory (struct file *file)
 {
   return file->dir;
+}
+
+/* Allocate two files as read end and write end of the pipe. */
+bool
+file_pipe_init (struct file *read_end, struct file *write_end)
+{
+  struct pipe *pipe;
+  if ((pipe = malloc (sizeof (struct pipe))) == NULL)
+    goto pipe_err;
+
+  if ((pipe->queue = malloc (sizeof (struct array_queue))) == NULL)
+    goto pipe_err;
+
+  /* Initialize pipe. */
+  queue_init (pipe->queue, 512, false);
+  pipe->ref_count = 2;
+
+  if ((read_end = calloc (1, sizeof (struct file))) == NULL)
+    goto pipe_err;
+  if ((write_end = calloc (1, sizeof (struct file))) == NULL)
+    goto pipe_err;
+
+  /* Initialize read end of the pipe. */
+  pipe->read_end = read_end;
+  read_end->ref_count = 1;
+  read_end->pipe = pipe;
+  lock_acquire (&files_lock);
+  list_push_front (&open_files, &read_end->elem);
+  lock_release (&files_lock);
+
+  /* Initialize wirte end of the pipe. */
+  pipe->write_end = write_end;
+  write_end->ref_count = 1;
+  write_end->pipe = pipe;
+  lock_acquire (&files_lock);
+  list_push_front (&open_files, &write_end->elem);
+  lock_release (&files_lock);
+
+  return true;
+
+pipe_err:
+  if (read_end)
+    free (read_end);
+  if (write_end)
+    free (write_end);
+  if (pipe)
+    {
+      if (pipe->queue)
+        free (pipe->queue);
+      free (pipe);
+    }
+  return false;
+}
+
+/* Read SIZE bytes from the pipe. */
+static int
+pipe_read (struct pipe *pipe, void *buffer_, off_t size)
+{
+  ASSERT (pipe != NULL);
+  ASSERT (buffer_ != NULL);
+
+  uint8_t *buffer = buffer_;
+  off_t bytes_read = 0;
+   
+  for (bytes_read = 0; bytes_read < size; bytes_read++)
+    {
+      /* If no data is available and write end is closed, EOF has reached. */
+      if (pipe->write_end->ref_count == 0 && queue_empty (pipe->queue))
+        break;
+      /* Otherwise, read a byte from the pipe. */
+      buffer[bytes_read] = queue_dequeue (pipe->queue);
+    }
+
+  return bytes_read;
+}
+
+/* Writes SIZE bytes from BUFFER into pipe.
+   Returns the number of bytes actually written,
+   which may be less than SIZE if end of file is reached. */
+static int 
+pipe_write (struct pipe *pipe, const void *buffer_, off_t size)
+{
+  ASSERT (pipe != NULL);
+  ASSERT (buffer_ != NULL);
+
+  const uint8_t *buffer = buffer_;
+  off_t bytes_written = 0;
+   
+  for (bytes_written = 0; bytes_written < size; bytes_written++)
+    {
+      /* If no data is available and read end is closed, EOF has reached. */
+      if (pipe->read_end->ref_count == 0 && queue_empty (pipe->queue))
+        break;
+      /* Otherwise, write a byte to the pipe. */
+      queue_enqueue (pipe->queue, buffer[bytes_written]);
+    }
+
+  return bytes_written;
 }

@@ -267,12 +267,7 @@ void cache_read_ahead (block_sector_t sector)
   if ((int32_t) sector < 0)
     return;
 
-  block_sector_t *next_sector = malloc (sizeof (block_sector_t));
-  if (next_sector == NULL)
-    return;
-
-  *next_sector = sector;
-  queue_enqueue (&read_queue, next_sector);
+  queue_enqueue (&read_queue, sector);
 }
 
 /* Pre-fetch specified blocks from the queue upon signal.
@@ -282,13 +277,11 @@ cache_read_ahead_daemon (void *unused UNUSED)
 {
   while (true)
     {
-      block_sector_t *sector = (block_sector_t *) queue_dequeue (&read_queue);
+      block_sector_t sector = (block_sector_t) queue_dequeue (&read_queue);
      
-      struct cache_block *block = cache_get_block (*sector, false);
+      struct cache_block *block = cache_get_block (sector, false);
       cache_read_block (block);
       cache_put_block (block);
-      
-      free (sector);
     }
 }
 
