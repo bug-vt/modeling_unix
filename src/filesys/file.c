@@ -3,15 +3,31 @@
 #include "filesys/inode.h"
 #include "threads/malloc.h"
 #include "string.h"
+#include <list.h>
+#include "threads/synch.h"
+
+static struct list open_files;
+static struct lock files_lock;
 
 /* An open file. */
 struct file 
   {
+    struct list_elem elem;      /* Element in open file list. */
     struct inode *inode;        /* File's inode. */
     off_t pos;                  /* Current position. */
     bool deny_write;            /* Has file_deny_write() been called? */
+    int ref_count;              /* Number of referencing fd. */
     struct dir *dir;            /* Additional info when file is directory. */
   };
+
+/* Initialize open file list, keeping track of files that provide 
+   layer of indirection between file descriptor and inode. */
+void
+file_init (void)
+{
+  list_init (&open_files);
+  lock_init (&files_lock);
+}
 
 /* Opens a file for the given INODE, of which it takes ownership,
    and returns the new file.  Returns a null pointer if an
@@ -25,7 +41,13 @@ file_open (struct inode *inode)
       file->inode = inode;
       file->pos = 0;
       file->deny_write = false;
+      file->ref_count = 1;
       file->dir = NULL;
+
+      lock_acquire (&files_lock);
+      list_push_front (&open_files, &file->elem);
+      lock_release (&files_lock);
+
       return file;
     }
   else
@@ -52,7 +74,14 @@ file_close (struct file *file)
     {
       file_allow_write (file);
       inode_close (file->inode);
-      free (file); 
+      /* Release resources if this was the last reference. */
+      if (--file->ref_count == 0)
+        {
+          lock_acquire (&files_lock);
+          list_remove (&file->elem);
+          lock_release (&files_lock);
+          free (file); 
+        }
     }
 }
 

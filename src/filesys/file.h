@@ -6,6 +6,8 @@
 
 struct inode;
 
+void file_init (void);
+
 /* Opening and closing files. */
 struct file *file_open (struct inode *);
 struct file *file_reopen (struct file *);
