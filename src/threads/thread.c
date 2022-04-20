@@ -242,32 +242,26 @@ do_thread_create (const char *name, int nice, thread_func *function, void *aux)
 tid_t
 thread_create (const char *name, int nice, thread_func *function, void *aux)
 {
-  struct thread *t;
+  struct maternal_bond *bond = NULL;
+  struct file **fd_table = NULL;
 
   /* Allocate memory for bond,
      which will be used for sharing data between
      the newly created process and its parent. */
-  struct maternal_bond *bond = malloc (sizeof (struct maternal_bond));
+  bond = malloc (sizeof (struct maternal_bond));
   if (bond == NULL)
-    return TID_ERROR;
+    goto thread_create_err;
 
   /* Allocate memory for file descriptor table,
      which keep track of all the open files that 
      are associate with each process. */
-  struct fd_table *fd_table = palloc_get_page (PAL_ZERO);
+  fd_table = palloc_get_page (PAL_ZERO);
   if (fd_table == NULL)
-    {
-      free (bond);
-      return TID_ERROR;
-    }
+    goto thread_create_err;
 
-  t = do_thread_create(name, nice, function, aux);
+  struct thread *t = do_thread_create(name, nice, function, aux);
   if (t == NULL)
-    {
-      free (bond);
-      palloc_free_page (fd_table);
-      return TID_ERROR;
-    }
+    goto thread_create_err;
 
   /* Initialize bond and assign parent by
      inserting into parent's children list */
@@ -287,14 +281,28 @@ thread_create (const char *name, int nice, thread_func *function, void *aux)
   if (parent->current_dir)
     t->current_dir = dir_reopen (parent->current_dir);
 
-  /* Attach empty file descriptor table to the new process. */
+  /* Copy the parent's file descriptor table.
+     Note that underlying file offset is shared between parent and child. */
   t->fd_table = fd_table;
+  if (parent->fd_table)
+    {
+      for (int i = 0; i < FD_MAX; i++)
+        t->fd_table[i] = file_dup (parent->fd_table[i]);
+    }
+
   /* Must save tid here - 't' could already be freed when we return 
      from wake_up_new_thread */ 
   tid_t tid = t->tid;
   /* Add to ready queue. */
   wake_up_new_thread (t);
   return tid;
+
+thread_create_err:
+  if (bond)
+    free (bond);
+  if (fd_table)
+    palloc_free_page (fd_table);
+  return TID_ERROR; 
 }
 
 /* Puts the current thread to sleep (i.e., in the BLOCKED state).

@@ -446,7 +446,7 @@ sys_close(int fd)
   
   dir_close (file_get_directory (file));
   file_close (file);
-  cur->fd_table->fd_to_file[fd] = NULL;
+  cur->fd_table[fd] = NULL;
 }
 
 /* Obtains a file from file descriptor */
@@ -456,7 +456,7 @@ get_file_from_fd (int fd)
   if (fd < 0 || fd >= FD_MAX)
     return NULL;
 
-  return thread_current ()->fd_table->fd_to_file[fd];
+  return thread_current ()->fd_table[fd];
 }
 
 /* Finds the next available file descriptor mapping and
@@ -466,7 +466,7 @@ static int
 set_next_fd (struct file *file)
 {
   struct inode *inode = file_get_inode (file);
-  struct file **fd_table = thread_current ()->fd_table->fd_to_file;
+  struct file **fd_table = thread_current ()->fd_table;
 
   for (int fd = 2; fd < FD_MAX; fd++)
     {

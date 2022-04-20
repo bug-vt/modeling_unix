@@ -81,7 +81,7 @@ process_execute (const char *cmd_line)
       }
 
 exec_done:
-    return tid; 
+  return tid; 
 } 
 
 /* A thread function that loads a user process and starts it
@@ -181,7 +181,7 @@ process_exit (void)
   printf("%s: exit(%d)\n", cur->name, status);
 
   /* Closes all open file descriptors and free the fd table. */
-  struct file **fd_table = cur->fd_table->fd_to_file;
+  struct file **fd_table = cur->fd_table;
   for (int fd = 2; fd < FD_MAX; fd++)
     {
       if (fd_table[fd] != NULL)

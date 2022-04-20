@@ -10,7 +10,7 @@
 
 
 static struct list open_files;
-static struct lock files_lock;
+static struct lock open_files_lock;
 
 /* An open file. */
 struct file 
@@ -42,7 +42,7 @@ void
 file_init (void)
 {
   list_init (&open_files);
-  lock_init (&files_lock);
+  lock_init (&open_files_lock);
 }
 
 /* Opens a file for the given INODE, of which it takes ownership,
@@ -61,9 +61,9 @@ file_open (struct inode *inode)
       file->dir = NULL;
       file->pipe = NULL;
 
-      lock_acquire (&files_lock);
+      lock_acquire (&open_files_lock);
       list_push_front (&open_files, &file->elem);
-      lock_release (&files_lock);
+      lock_release (&open_files_lock);
 
       return file;
     }
@@ -89,21 +89,20 @@ file_close (struct file *file)
 {
   if (file != NULL)
     {
-      file_allow_write (file);
-      inode_close (file->inode);
       /* Release resources if this was the last reference. */
       if (--file->ref_count == 0)
         {
-          lock_acquire (&files_lock);
+          file_allow_write (file);
+          inode_close (file->inode);
+          lock_acquire (&open_files_lock);
           list_remove (&file->elem);
-          lock_release (&files_lock);
+          lock_release (&open_files_lock);
 
           /* Release resources for pipe if both read end and write end are
              closed. */
           struct pipe *pipe = file->pipe;
           if (pipe)
           {
-            
             pipe->ref_count--;
             if (pipe->ref_count == 0)
               {
@@ -122,6 +121,21 @@ struct inode *
 file_get_inode (struct file *file) 
 {
   return file->inode;
+}
+
+/* Duplicate file by incrementing reference count. */
+struct file *
+file_dup (struct file *file)
+{
+  if (file != NULL)
+    {
+      ASSERT (file->ref_count > 0);
+      lock_acquire (&open_files_lock);
+      file->ref_count++;
+      lock_release (&open_files_lock);
+    }
+
+  return file;
 }
 
 /* Reads SIZE bytes from FILE into BUFFER,
@@ -295,17 +309,17 @@ file_pipe_init (struct file *read_end, struct file *write_end)
   pipe->read_end = read_end;
   read_end->ref_count = 1;
   read_end->pipe = pipe;
-  lock_acquire (&files_lock);
+  lock_acquire (&open_files_lock);
   list_push_front (&open_files, &read_end->elem);
-  lock_release (&files_lock);
+  lock_release (&open_files_lock);
 
   /* Initialize wirte end of the pipe. */
   pipe->write_end = write_end;
   write_end->ref_count = 1;
   write_end->pipe = pipe;
-  lock_acquire (&files_lock);
+  lock_acquire (&open_files_lock);
   list_push_front (&open_files, &write_end->elem);
-  lock_release (&files_lock);
+  lock_release (&open_files_lock);
 
   return true;
 

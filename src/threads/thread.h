@@ -47,13 +47,6 @@ struct maternal_bond
                               process start-up. */
 };
 
-/* Struct that contains the table of fd mappings */
-struct fd_table 
-{
-  /* Array that stores the file descriptor mappings */
-  struct file *fd_to_file[FD_MAX]; 
-};
-
 /* A kernel thread or user process.
 
    Each thread structure is stored in its own 4 kB page.  The
@@ -151,7 +144,7 @@ struct thread
   struct file *file; /* Executable file that the current process 
                         is executing. */
   /* Used for syscall.c */
-  struct fd_table *fd_table; /* file descriptor table */
+  struct file **fd_table; /* file descriptor table */
 
   /* File name for syscalls that uses them */
   char *syscall_arg;

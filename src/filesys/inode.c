@@ -260,14 +260,14 @@ access_indirect_block (block_sector_t indirect, bool write)
 /* List of open inodes, so that opening a single inode twice
    returns the same `struct inode'. */
 static struct list open_inodes;
-static struct lock inodes_lock;
+static struct lock open_inodes_lock;
 
 /* Initializes the inode module. */
 void
 inode_init (void) 
 {
   list_init (&open_inodes);
-  lock_init (&inodes_lock);
+  lock_init (&open_inodes_lock);
 }
 
 /* Initializes an inode with LENGTH bytes of data and
@@ -333,7 +333,7 @@ inode_open (block_sector_t sector)
   struct list_elem *e;
   struct inode *inode;
 
-  lock_acquire (&inodes_lock);
+  lock_acquire (&open_inodes_lock);
   /* Check whether this inode is already open. */
   for (e = list_begin (&open_inodes); e != list_end (&open_inodes);
        e = list_next (e)) 
@@ -342,11 +342,11 @@ inode_open (block_sector_t sector)
       if (inode->sector == sector) 
         {
           inode_reopen (inode);
-          lock_release (&inodes_lock);
+          lock_release (&open_inodes_lock);
           return inode; 
         }
     }
-  lock_release (&inodes_lock);
+  lock_release (&open_inodes_lock);
 
   /* Allocate memory. */
   inode = malloc (sizeof *inode);
@@ -354,9 +354,9 @@ inode_open (block_sector_t sector)
     return NULL;
 
   /* Initialize. */
-  lock_acquire (&inodes_lock);
+  lock_acquire (&open_inodes_lock);
   list_push_front (&open_inodes, &inode->elem);
-  lock_release (&inodes_lock);
+  lock_release (&open_inodes_lock);
 
   inode->sector = sector;
   inode->open_cnt = 1;
@@ -399,10 +399,10 @@ inode_close (struct inode *inode)
   /* Release resources if this was the last opener. */
   if (--inode->open_cnt == 0)
     {
-      lock_acquire (&inodes_lock);
+      lock_acquire (&open_inodes_lock);
       /* Remove from inode list and release lock. */
       list_remove (&inode->elem);
-      lock_release (&inodes_lock);
+      lock_release (&open_inodes_lock);
 
       /* Deallocate blocks if removed. */
       if (inode->removed) 
