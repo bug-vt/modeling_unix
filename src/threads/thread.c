@@ -290,6 +290,9 @@ thread_create (const char *name, int nice, thread_func *function, void *aux)
         t->fd_table[i] = file_dup (parent->fd_table[i]);
     }
 
+  /* Copy the parent's executable file. */
+  t->exec_file = file_dup (parent->exec_file);
+
   /* Must save tid here - 't' could already be freed when we return 
      from wake_up_new_thread */ 
   tid_t tid = t->tid;

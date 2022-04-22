@@ -45,4 +45,7 @@ bool readdir (int fd, char name[READDIR_MAX_LEN + 1]);
 bool isdir (int fd);
 int inumber (int fd);
 
+/* Project 5 only. */
+int fork (void);
+
 #endif /* lib/user/syscall.h */

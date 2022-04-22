@@ -141,7 +141,7 @@ struct thread
                                  and its parent process. */
   struct list children; /* List of bond between current process and
                            its children. */
-  struct file *file; /* Executable file that the current process 
+  struct file *exec_file; /* Executable file that the current process 
                         is executing. */
   /* Used for syscall.c */
   struct file **fd_table; /* file descriptor table */

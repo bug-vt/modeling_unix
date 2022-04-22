@@ -28,57 +28,137 @@
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 /* Our Code */
+static thread_func dup_process NO_RETURN;
 static int setup_args (const char *str, void **esp);
 static struct maternal_bond * find_child (tid_t child_tid);
 static bool is_orphan_or_zombie (struct maternal_bond *bond);
+
+
+/* Starts a new thread that is exact same copy of calling (parent)
+   thread. The new thread may be scheduled (and may even exit)
+   before process_fork() returns.  Returns the new process's
+   thread id, or TID_ERROR if the thread cannot be created. */
+tid_t
+process_fork (struct intr_frame *if_)
+{
+  tid_t tid;   
+  struct thread *parent = thread_current ();
+
+  /* Create a new thread that is duplicate of parent. */  
+  tid = thread_create (parent->name, NICE_DEFAULT, dup_process, if_); 
+  if (tid == TID_ERROR)
+    goto fork_err;
+
+  /* Wait for newly created process to finish initialize. */
+  struct maternal_bond *bond = find_child (tid);
+  sema_down (&bond->load);
+  /* Fail during duplication. */
+  if (bond->load_fail)
+    {
+      /* Wait for the child process to completely exit. */
+      sema_down (&bond->exit);
+      list_remove (&bond->elem);
+      free (bond);
+      tid = TID_ERROR;
+    }
+
+  return tid;
+
+fork_err:
+  return TID_ERROR;
+}
+
+/* A thread function that copies a parent process and starts
+   it running. */
+static void
+dup_process (void *parent_if_)
+{
+  struct thread *t = thread_current ();
+  bool success = false;
+
+  /* Copy parent's interrupt frame. */
+  struct intr_frame if_;
+  memcpy (&if_, parent_if_, sizeof (struct intr_frame));
+  if_.eax = 0;
+
+  /* Allocate and activate page directory. */
+  t->pagedir = pagedir_create ();
+  if (t->pagedir == NULL) 
+    goto dup_done;
+  process_activate ();
+  /* To DO: copy parent's virtual memory. 
+     For now, generate fork error. */
+  goto dup_done;
+
+  /* At this point, duplication have succeed. */
+  success = true;
+  t->bond->load_fail = false;
+
+dup_done:
+  /* We arrive here whether the load is successful or not. */
+  /* Notify the parent that load was completed (or failed). */
+  sema_up (&t->bond->load);
+
+  /* If duplication failed, quit. */
+  if (!success)
+    sys_exit (-1);
+  
+  /* Start the user process by simulating a return from an
+     interrupt, implemented by intr_exit (in
+     threads/intr-stubs.S).  Because intr_exit takes all of its
+     arguments on the stack in the form of a `struct intr_frame',
+     we just point the stack pointer (%esp) to our stack frame
+     and jump to it. */
+  asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
+  NOT_REACHED ();
+}
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
    thread id, or TID_ERROR if the thread cannot be created. */
-
 tid_t 
 process_execute (const char *cmd_line) 
 {   
-    char *line_copy;   
-    tid_t tid;   
+  char *line_copy;   
+  tid_t tid;   
 
-    /* Make a copy of FILE_NAME.      
-       Otherwise there's a race between the caller and load(). 
-       Also note the following: 
-       (1) Command line passed to the Pintos kernel itself is
-           limited to 128 bytes.
-       (2) If called by exec, str_copy_from_user() make sure cmd_line is 
-           less than or equal to one page. */
-    line_copy = palloc_get_page (0);   
-    if (line_copy == NULL)     
-      return TID_ERROR;   
-    strlcpy (line_copy, cmd_line, PGSIZE);   
+  /* Make a copy of FILE_NAME.      
+     Otherwise there's a race between the caller and load(). 
+     Also note the following: 
+     (1) Command line passed to the Pintos kernel itself is
+         limited to 128 bytes.
+     (2) If called by exec, str_copy_from_user() make sure cmd_line is 
+         less than or equal to one page. */
+  line_copy = palloc_get_page (0);   
+  if (line_copy == NULL)     
+    return TID_ERROR;   
+  strlcpy (line_copy, cmd_line, PGSIZE);   
 
-    /* Extract executable file name from raw input line. */
-    char *fname, *save_ptr;   
-    fname = strtok_r ((char *) cmd_line, " ", &save_ptr);
+  /* Extract executable file name from raw input line. */
+  char *fname, *save_ptr;   
+  fname = strtok_r ((char *) cmd_line, " ", &save_ptr);
 
-    /* Create a new thread to execute executable file. */  
-    tid = thread_create (fname, NICE_DEFAULT, start_process, line_copy); 
-    if (tid == TID_ERROR)
-      {
-        palloc_free_page (line_copy);
-        goto exec_done;
-      }
+  /* Create a new thread to execute executable file. */  
+  tid = thread_create (fname, NICE_DEFAULT, start_process, line_copy); 
+  if (tid == TID_ERROR)
+    {
+      palloc_free_page (line_copy);
+      goto exec_done;
+    }
 
-    /* Wait for newly created process to finish loading. */
-    struct maternal_bond *bond = find_child (tid);
-    sema_down (&bond->load);
-    /* Load error */
-    if (bond->load_fail)
-      {
-        /* Wait for the child process to completely exit. */
-        sema_down (&bond->exit);
-        list_remove (&bond->elem);
-        free (bond);
-        tid = TID_ERROR;
-      }
+  /* Wait for newly created process to finish loading. */
+  struct maternal_bond *bond = find_child (tid);
+  sema_down (&bond->load);
+  /* Load error */
+  if (bond->load_fail)
+    {
+      /* Wait for the child process to completely exit. */
+      sema_down (&bond->exit);
+      list_remove (&bond->elem);
+      free (bond);
+      tid = TID_ERROR;
+    }
 
 exec_done:
   return tid; 
@@ -195,7 +275,7 @@ process_exit (void)
 
   /* Close the executable that was running on exiting process.
      This re-enable the write permission. */
-  file_close (cur->file);
+  file_close (cur->exec_file);
   /* Close the current working directory */
   dir_close (cur->current_dir);
 
@@ -427,7 +507,8 @@ load (const char *file_name, void (**eip) (void), void **esp)
  done:
   /* We arrive here whether the load is successful or not. */
   /* Record executable file that was loaded to the process */
-  t->file = file;
+  file_close (t->exec_file);
+  t->exec_file = file;
   /* Notify the parent that load was completed (or failed). */
   sema_up (&t->bond->load);
   return success;

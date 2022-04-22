@@ -45,6 +45,7 @@ static bool sys_mkdir (const char *dir);
 static bool sys_readdir (int fd, char *name);
 static bool sys_isdir (int fd);
 static int sys_inumber (int fd);
+static int sys_fork (struct intr_frame *f);
 
 static struct file *get_file_from_fd (int fd);
 static int set_next_fd (struct file *file);
@@ -194,6 +195,11 @@ syscall_handler (struct intr_frame *f)
         {
           copy_from_user (&args, stack_arg_addr, SYSCALL1);
           f->eax = sys_inumber (args[0]);
+          break;
+        }
+      case SYS_FORK:
+        {
+          f->eax = sys_fork (f);
           break;
         }
     }
@@ -545,4 +551,11 @@ static int sys_inumber (int fd)
 
   struct inode *inode = file_get_inode (file);
   return inode_get_inumber (inode);
+}
+
+/* Create a new process by duplicating the calling process. */
+static int 
+sys_fork (struct intr_frame *f)
+{
+  return process_fork (f);
 }
