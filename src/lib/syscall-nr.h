@@ -31,7 +31,8 @@ enum
     SYS_INUMBER,                /* Returns the inode number for a fd. */
 
     /* Project 5 only. */
-    SYS_FORK
+    SYS_FORK,
+    SYS_DUP2
   };
 
 #endif /* lib/syscall-nr.h */

@@ -188,3 +188,9 @@ fork (void)
 {
   return syscall0 (SYS_FORK);
 }
+
+int
+dup2 (int old_fd, int new_fd)
+{
+  return syscall2 (SYS_DUP2, old_fd, new_fd);
+}

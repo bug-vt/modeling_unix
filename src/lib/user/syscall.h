@@ -47,5 +47,6 @@ int inumber (int fd);
 
 /* Project 5 only. */
 int fork (void);
+int dup2 (int old_fd, int new_fd);
 
 #endif /* lib/user/syscall.h */

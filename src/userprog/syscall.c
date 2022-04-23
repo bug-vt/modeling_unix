@@ -46,6 +46,7 @@ static bool sys_readdir (int fd, char *name);
 static bool sys_isdir (int fd);
 static int sys_inumber (int fd);
 static int sys_fork (struct intr_frame *f);
+static int sys_dup2 (int old_fd, int new_fd);
 
 static struct file *get_file_from_fd (int fd);
 static int set_next_fd (struct file *file);
@@ -200,6 +201,12 @@ syscall_handler (struct intr_frame *f)
       case SYS_FORK:
         {
           f->eax = sys_fork (f);
+          break;
+        }
+      case SYS_DUP2:
+        {
+          copy_from_user (&args, stack_arg_addr, SYSCALL2);
+          f->eax = sys_dup2 (args[0], args[1]);
           break;
         }
     }
@@ -446,10 +453,8 @@ sys_close(int fd)
   struct thread *cur = thread_current ();
   struct file *file = get_file_from_fd (fd);
   if (file == NULL)
-    {
-      sys_exit (-1);
-    }
-  
+    return;
+ 
   dir_close (file_get_directory (file));
   file_close (file);
   cur->fd_table[fd] = NULL;
@@ -558,4 +563,27 @@ static int
 sys_fork (struct intr_frame *f)
 {
   return process_fork (f);
+}
+
+/* Allocates a new file descriptor NEW_FD that refers to the same
+   open file description as the OLD_FD. */
+static int
+sys_dup2 (int old_fd, int new_fd)
+{
+  struct file *file = get_file_from_fd (old_fd);
+  if (file == NULL)
+    return -1;
+  
+  if (old_fd == new_fd)
+    return new_fd;
+
+  /* Close previously opened file in new_fd. */
+  struct file *prev_file = get_file_from_fd (new_fd);
+  file_close (prev_file);
+
+  /* Duplicate file to new_fd. */
+  struct thread *cur = thread_current();
+  cur->fd_table[new_fd] = file_dup (file);
+
+  return new_fd;
 }
