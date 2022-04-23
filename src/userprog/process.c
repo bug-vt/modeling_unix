@@ -34,6 +34,13 @@ static struct maternal_bond * find_child (tid_t child_tid);
 static bool is_orphan_or_zombie (struct maternal_bond *bond);
 
 
+/* Hold data that is needed for thread duplication. */
+struct parent_copy
+  {
+    uint32_t *pagedir;
+    struct intr_frame *if_;
+  };
+
 /* Starts a new thread that is exact same copy of calling (parent)
    thread. The new thread may be scheduled (and may even exit)
    before process_fork() returns.  Returns the new process's
@@ -44,8 +51,12 @@ process_fork (struct intr_frame *if_)
   tid_t tid;   
   struct thread *parent = thread_current ();
 
+  struct parent_copy *copy = malloc (sizeof (struct parent_copy));
+  copy->pagedir = parent->pagedir;
+  copy->if_ = if_;
+
   /* Create a new thread that is duplicate of parent. */  
-  tid = thread_create (parent->name, NICE_DEFAULT, dup_process, if_); 
+  tid = thread_create (parent->name, NICE_DEFAULT, dup_process, copy); 
   if (tid == TID_ERROR)
     goto fork_err;
 
@@ -71,26 +82,26 @@ fork_err:
 /* A thread function that copies a parent process and starts
    it running. */
 static void
-dup_process (void *parent_if_)
+dup_process (void *copy_)
 {
+  struct parent_copy *copy = (struct parent_copy *) copy_;
   struct thread *t = thread_current ();
   bool success = false;
 
   /* Copy parent's interrupt frame. */
   struct intr_frame if_;
-  memcpy (&if_, parent_if_, sizeof (struct intr_frame));
+  memcpy (&if_, copy->if_, sizeof (struct intr_frame));
+  /* Set return value to 0. */
   if_.eax = 0;
 
   /* Allocate and activate page directory. */
-  t->pagedir = pagedir_create ();
+  t->pagedir = pagedir_copy (copy->pagedir);
   if (t->pagedir == NULL) 
     goto dup_done;
   process_activate ();
-  /* To DO: copy parent's virtual memory. 
-     For now, generate fork error. */
-  goto dup_done;
 
   /* At this point, duplication have succeed. */
+  free (copy);
   success = true;
   t->bond->load_fail = false;
 

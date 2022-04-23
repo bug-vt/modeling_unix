@@ -28,6 +28,69 @@ pagedir_create (void)
   return pd;
 }
 
+/* Return the copy of the given page directory PD, 
+   copying all the pages it references. */
+uint32_t *
+pagedir_copy (uint32_t *pd)
+{
+  ASSERT (pd != NULL);
+  ASSERT (pd != init_page_dir);
+
+  uint32_t *pd_copy = palloc_get_page (0);
+  if (pd_copy == NULL)
+    goto pagedir_copy_err;
+
+  /* First, copy page directory. 
+     This allow to copy user virtual address space. */
+  memcpy (pd_copy, pd, PGSIZE);
+
+  uint32_t *pde, *pde_copy;
+  /* Find the valid (present) page by iterating over
+     the two-level page lookup.
+     First, validate page directory entry and assign new mapping to
+     page table if present.
+     Next, validate page table entry. If present, assign new mapping to
+     physical memory.
+     Lastly, copy the content into the newly assigned physical memory. */
+  for (pde = pd, pde_copy = pd_copy; pde < pd + pd_no (PHYS_BASE); pde++, pde_copy++)
+    /* Page directory entry is present. */
+    if (*pde & PTE_P) 
+      {
+        /* Assign different entry mapping to the copy. */
+        uint32_t *pt_copy = palloc_get_page (PAL_ZERO);
+        if (pt_copy == NULL) 
+          goto pagedir_copy_err;
+        *pde_copy = pde_create_user (pt_copy);
+
+        /* Second, Locate page table. */
+        uint32_t *pt = pde_get_pt (*pde);
+        uint32_t *pte, *pte_copy;
+        /* Iterate through the page table and locate the valid entries. */
+        for (pte = pt, pte_copy = pt_copy; pte < pt + PGSIZE / sizeof *pte; pte++, pte_copy++)
+          {
+            /* Page table entry is present. */
+            if (*pte & PTE_P) 
+              {
+                /* Allocate new kernel virtual memory (physical memory + PHYS_BASE)
+                   and assign it to the copy. */
+                uint8_t *kpage = palloc_get_page (PAL_USER);
+                if (kpage == NULL)
+                  goto pagedir_copy_err;
+                *pte_copy = pte_create_user (kpage, *pte & PTE_W);
+
+                /* Copy the memory content of the referencing frame. */
+                memcpy (kpage, pte_get_page (*pte), PGSIZE);
+              }
+          }
+      }
+
+  return pd_copy;
+
+pagedir_copy_err:
+  pagedir_destroy (pd_copy);
+  return NULL;
+}
+
 /* Destroys page directory PD, freeing all the pages it
    references. */
 void
