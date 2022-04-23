@@ -3,11 +3,13 @@
 
 #include "filesys/off_t.h"
 #include "filesys/directory.h"
+#include "filesys/pipe.h"
 
 enum _file_type {STDIN, STDOUT, REG, DIR, PIPE};
 typedef enum _file_type file_type;
 
 struct inode;
+struct pipe;
 
 void file_init (void);
 
@@ -40,7 +42,7 @@ char *file_name_from_path (const char *path);
 /* Used when file is directory. */
 struct dir *file_get_directory (struct file *);
 
-/* Create pipe. */
-bool file_pipe_init (struct file *read_end, struct file *write_end);
+/* Used for pipe. */
+bool file_pipe_ends (struct pipe *, struct file **read_end, struct file **write_end);
 
 #endif /* filesys/file.h */

@@ -194,3 +194,9 @@ dup2 (int old_fd, int new_fd)
 {
   return syscall2 (SYS_DUP2, old_fd, new_fd);
 }
+
+int
+pipe (int *pipefd)
+{
+  return syscall1 (SYS_PIPE, pipefd);
+}

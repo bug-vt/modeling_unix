@@ -19,6 +19,7 @@
 #include "threads/palloc.h"
 #include "filesys/directory.h"
 #include "lib/user/syscall.h"
+#include "filesys/pipe.h"
 
 #define WORD_SIZE 4
 #define SYSCALL1 WORD_SIZE 
@@ -47,6 +48,7 @@ static bool sys_isdir (int fd);
 static int sys_inumber (int fd);
 static int sys_fork (struct intr_frame *f);
 static int sys_dup2 (int old_fd, int new_fd);
+static int sys_pipe (int *pipefd);
 
 static struct file *get_file_from_fd (int fd);
 static int set_next_fd (struct file *file);
@@ -207,6 +209,13 @@ syscall_handler (struct intr_frame *f)
         {
           copy_from_user (&args, stack_arg_addr, SYSCALL2);
           f->eax = sys_dup2 (args[0], args[1]);
+          break;
+        }
+      case SYS_PIPE:
+        {
+          copy_from_user (&args, stack_arg_addr, SYSCALL1);
+          validate_buffer ((void *) args[0], sizeof (int) * 2);
+          f->eax = sys_pipe ((int *) args[0]);
           break;
         }
     }
@@ -562,4 +571,34 @@ sys_dup2 (int old_fd, int new_fd)
   cur->fd_table[new_fd] = file_dup (file);
 
   return new_fd;
+}
+
+/* Create a pipe, a unidirectional data channel that can be
+   used for interprocess communication. The array pipefd is
+   used to return two file descriptors referring to the ends of
+   the pipe. pipefd[0] refers to the read end whereas 
+   pipefd[1] refers to the write end of the pipe. */
+static int
+sys_pipe (int *pipefd)
+{
+  struct file *read_end = NULL;
+  struct file *write_end = NULL; 
+  /* The limit on memory that can be allocated has been reached. */
+  if (!pipe_open (&read_end, &write_end))
+    return -1;
+  
+  ASSERT (read_end != NULL);
+  ASSERT (write_end != NULL);
+
+  pipefd[0] = set_next_fd (read_end);
+  pipefd[1] = set_next_fd (write_end);
+  /* The per-process limit on the number of open fd has been reached. */
+  if (pipefd[0] == -1 || pipefd[1] == -1)
+    {
+      file_close (read_end);
+      file_close (write_end);
+      return -1;
+    }
+
+  return 0;
 }

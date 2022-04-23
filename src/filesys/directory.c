@@ -292,11 +292,12 @@ dir_remove (struct dir *dir, const char *name)
     {
       struct dir_entry e;
       off_t ofs;
-      /* Ignore first two directory entries ("." and "..") */
-      for (ofs = sizeof e * 2; inode_read_at (inode, &e, sizeof e, ofs) == sizeof e;
+
+      for (ofs = 0; inode_read_at (inode, &e, sizeof e, ofs) == sizeof e;
            ofs += sizeof e) 
         {
-          if (e.in_use)
+          /* Ignore "." and ".." directory entries */
+          if (e.in_use && strcmp (e.name, ".") && strcmp (e.name, ".."))
             goto done;
         }
     }
@@ -310,7 +311,7 @@ dir_remove (struct dir *dir, const char *name)
   inode_remove (inode);
   success = true;
 
- done:
+done:
   inode_lock_release (dir->inode);
   inode_close (inode);
   return success;

@@ -38,4 +38,4 @@ uint32_t queue_peek (struct array_queue *);
 uint32_t queue_dequeue (struct array_queue *);
 void queue_enqueue (struct array_queue *, uint32_t);
 
-#endif
+#endif /* lib/kernel/queue.h */
