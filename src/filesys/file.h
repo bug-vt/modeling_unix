@@ -4,11 +4,15 @@
 #include "filesys/off_t.h"
 #include "filesys/directory.h"
 
+enum _file_type {STDIN, STDOUT, REG, DIR, PIPE};
+typedef enum _file_type file_type;
+
 struct inode;
 
 void file_init (void);
 
 /* Opening and closing files. */
+struct file *file_open_console (file_type);
 struct file *file_open (struct inode *);
 struct file *file_reopen (struct file *);
 void file_close (struct file *);
@@ -34,7 +38,6 @@ off_t file_length (struct file *);
 char *file_name_from_path (const char *path);
 
 /* Used when file is directory. */
-void file_set_directory (struct file *);
 struct dir *file_get_directory (struct file *);
 
 /* Create pipe. */

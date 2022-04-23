@@ -380,17 +380,6 @@ sys_filesize(int fd)
 static int
 sys_read(int fd, void *buffer, unsigned size)
 {
-
-  if (fd == 0) /* reading from stdin */
-    {
-      char *buf = buffer;
-      for (unsigned int index = 0; index < size; index ++)
-        {
-          buf[index] = input_getc ();
-        }
-      return size;
-    }
-
   struct file *file = get_file_from_fd (fd);
   /* Reject if fd is invalid or if fd is directory. */
   if (file == NULL || file_get_directory (file) != NULL)
@@ -405,12 +394,6 @@ sys_read(int fd, void *buffer, unsigned size)
 static int
 sys_write(int fd, const void *buffer, unsigned size)
 {
-  if (fd == 1) /* writing to stdout */
-    {
-      putbuf (buffer, size);
-      return size;
-    }
-
   struct file *file = get_file_from_fd (fd);
   /* Reject if fd is invalid or if fd is directory. */
   if (file == NULL || file_get_directory (file) != NULL)
@@ -476,20 +459,13 @@ get_file_from_fd (int fd)
 static int
 set_next_fd (struct file *file)
 {
-  struct inode *inode = file_get_inode (file);
   struct file **fd_table = thread_current ()->fd_table;
 
-  for (int fd = 2; fd < FD_MAX; fd++)
+  for (int fd = 0; fd < FD_MAX; fd++)
     {
       if (!fd_table[fd])
         {
-          /* If the file is directory, record additionally to
-             open directory table. */
-          if (inode_is_dir (inode))
-            file_set_directory (file);
-
           fd_table[fd] = file;
-
           return fd;
         } 
     }

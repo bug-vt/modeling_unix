@@ -289,6 +289,12 @@ thread_create (const char *name, int nice, thread_func *function, void *aux)
       for (int i = 0; i < FD_MAX; i++)
         t->fd_table[i] = file_dup (parent->fd_table[i]);
     }
+  /* Otherwise, initialize fd 0 as STDIN and fd 1 as STDOUT. */
+  else
+    {
+      t->fd_table[0] = file_open_console (STDIN); 
+      t->fd_table[1] = file_open_console (STDOUT); 
+    }
 
   /* Copy the parent's executable file. */
   t->exec_file = file_dup (parent->exec_file);

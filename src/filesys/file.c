@@ -7,6 +7,7 @@
 #include "threads/synch.h"
 #include "lib/kernel/queue.h"
 #include "stdio.h"
+#include "devices/input.h"
 
 
 static struct list open_files;
@@ -16,6 +17,7 @@ static struct lock open_files_lock;
 struct file 
   {
     struct list_elem elem;      /* Element in open file list. */
+    file_type type;             /* Type of file. */
     struct inode *inode;        /* File's inode. */
     off_t pos;                  /* Current position. */
     bool deny_write;            /* Has file_deny_write() been called? */
@@ -45,6 +47,24 @@ file_init (void)
   lock_init (&open_files_lock);
 }
 
+/* Open console, STDIN or STDOUT, and returns as a file. */
+struct file *
+file_open_console (file_type type)
+{
+  if (type != STDIN && type != STDOUT)
+    return NULL;
+
+  struct file *file = calloc (1, sizeof *file);
+  file->type = type;
+  file->ref_count = 1;
+  
+  lock_acquire (&open_files_lock);
+  list_push_front (&open_files, &file->elem);
+  lock_release (&open_files_lock);
+
+  return file;
+}
+
 /* Opens a file for the given INODE, of which it takes ownership,
    and returns the new file.  Returns a null pointer if an
    allocation fails or if INODE is null. */
@@ -54,11 +74,20 @@ file_open (struct inode *inode)
   struct file *file = calloc (1, sizeof *file);
   if (inode != NULL && file != NULL)
     {
+      if (inode_is_dir (inode))
+        {
+          file->type = DIR;
+          file->dir = dir_open (inode);
+        }
+      else
+        {
+          file->type = REG;
+          file->dir = NULL;
+        }
       file->inode = inode;
       file->pos = 0;
       file->deny_write = false;
       file->ref_count = 1;
-      file->dir = NULL;
       file->pipe = NULL;
 
       lock_acquire (&open_files_lock);
@@ -147,7 +176,15 @@ off_t
 file_read (struct file *file, void *buffer, off_t size) 
 {
   off_t bytes_read;
-  if (file->pipe)
+  if (file->type == STDIN)
+    {
+      char *buf = buffer;
+      for (bytes_read = 0; bytes_read < size; bytes_read++)
+        buf[bytes_read] = input_getc ();
+    }
+  else if (file->type == STDOUT)
+    return 0;
+  else if (file->type == PIPE)
     bytes_read = pipe_read (file->pipe, buffer, size);
   else
     {
@@ -179,7 +216,14 @@ off_t
 file_write (struct file *file, const void *buffer, off_t size) 
 {
   off_t bytes_written;
-  if (file->pipe)
+  if (file->type == STDIN)
+    return 0;
+  else if (file->type == STDOUT)
+    {
+      putbuf (buffer, size);
+      bytes_written = size;
+    }
+  else if (file->type == PIPE)
     bytes_written = pipe_write (file->pipe, buffer, size);
   else
     {
@@ -271,13 +315,6 @@ file_name_from_path (const char *path)
   return file_name;
 }
 
-/* Indicate that the given file is a directory */
-void
-file_set_directory (struct file *file)
-{
-  file->dir = dir_open (file->inode);
-}
-
 /* Return corresponding directory if the given file is a directory */
 struct dir *
 file_get_directory (struct file *file)
@@ -307,6 +344,7 @@ file_pipe_init (struct file *read_end, struct file *write_end)
 
   /* Initialize read end of the pipe. */
   pipe->read_end = read_end;
+  read_end->type = PIPE;
   read_end->ref_count = 1;
   read_end->pipe = pipe;
   lock_acquire (&open_files_lock);
@@ -315,6 +353,7 @@ file_pipe_init (struct file *read_end, struct file *write_end)
 
   /* Initialize wirte end of the pipe. */
   pipe->write_end = write_end;
+  write_end->type = PIPE;
   write_end->ref_count = 1;
   write_end->pipe = pipe;
   lock_acquire (&open_files_lock);

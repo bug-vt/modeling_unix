@@ -273,14 +273,13 @@ process_exit (void)
 
   /* Closes all open file descriptors and free the fd table. */
   struct file **fd_table = cur->fd_table;
-  for (int fd = 2; fd < FD_MAX; fd++)
+  for (int fd = 0; fd < FD_MAX; fd++)
     {
       if (fd_table[fd] != NULL)
         {
           dir_close (file_get_directory (fd_table[fd]));
           file_close (fd_table[fd]);
         }
-
     }
   palloc_free_page (cur->fd_table);
 
