@@ -43,8 +43,9 @@ filesys_init (bool format)
 void
 filesys_done (void) 
 {
-  cache_flush ();
+  /* Write back free map first then flush the buffer cache. */
   free_map_close ();
+  cache_flush ();
 }
 
 /* Create a directory named given from the path with the given
