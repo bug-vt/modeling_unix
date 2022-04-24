@@ -112,8 +112,8 @@ pipe_open (struct file **read_end, struct file **write_end)
 
   if (!file_pipe_ends (pipe, read_end, write_end))
     {
-      free (pipe);
       free (pipe->buffer);
+      free (pipe);
       return false;
     }
 

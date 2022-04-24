@@ -66,17 +66,33 @@ filesys_dir_create (const char *path, int num_entries)
 
   struct inode *inode = NULL;
   struct dir *new_dir;
+  /* First, create new directory.
+     Make sure file with the same name does not already exists. */
   bool success = (dir != NULL 
                   && free_map_allocate (1, &inode_sector)
                   && dir_create (inode_sector, num_entries)
-                  && dir_add (dir, file_name, inode_sector)
-                  && dir_lookup (dir, file_name, &inode)
-                  && (new_dir = dir_open (inode))
-                  && dir_add (new_dir, ".", inode_get_inumber (inode))
-                  && dir_add (new_dir, "..", inode_get_inumber (dir_get_inode (dir))));
+                  && dir_add (dir, file_name, inode_sector));
 
   if (!success && inode_sector != 0) 
-    free_map_release (inode_sector, 1);
+    {
+      free_map_release (inode_sector, 1);
+      return false;
+    }
+
+  /* At this point, we know that the new directory has been created
+     and its name is unique. */ 
+  /* Next, add default "." and ".." entries to the 
+     newly created directory. */
+  success = (dir_lookup (dir, file_name, &inode)
+             && (new_dir = dir_open (inode))
+             && dir_add (new_dir, ".", inode_get_inumber (inode))
+             && dir_add (new_dir, "..", inode_get_inumber (dir_get_inode (dir))));
+
+  if (!success) 
+    {
+      dir_remove (dir, file_name);
+      free_map_release (inode_sector, 1);
+    }
   
   return success;
 }
