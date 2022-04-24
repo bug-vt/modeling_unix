@@ -25,7 +25,6 @@
 #include <threads/spinlock.h>
 #include <userprog/syscall.h>
 
-static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 /* Our Code */
 static thread_func dup_process NO_RETURN;
@@ -151,7 +150,7 @@ process_execute (const char *cmd_line)
   fname = strtok_r ((char *) cmd_line, " ", &save_ptr);
 
   /* Create a new thread to execute executable file. */  
-  tid = thread_create (fname, NICE_DEFAULT, start_process, line_copy); 
+  tid = thread_create (fname, NICE_DEFAULT, process_start, line_copy); 
   if (tid == TID_ERROR)
     {
       palloc_free_page (line_copy);
@@ -177,13 +176,21 @@ exec_done:
 
 /* A thread function that loads a user process and starts it
    running. */
-static void
-start_process (void *file_name_)
+void
+process_start (void *file_name_)
 {
-
-  char *file_name = file_name_;
+  char *cmd_line = file_name_;
   struct intr_frame if_;
   bool success;
+
+  char *line_copy = palloc_get_page (0);   
+  if (line_copy == NULL)     
+    sys_exit (-1);
+  strlcpy (line_copy, cmd_line, PGSIZE);   
+
+  /* Extract executable file name from raw input line. */
+  char *exec_name, *save_ptr;   
+  exec_name = strtok_r ((char *) line_copy, " ", &save_ptr);
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
@@ -191,13 +198,14 @@ start_process (void *file_name_)
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
 
-  success = load (file_name, &if_.eip, &if_.esp);
+  success = load (exec_name, &if_.eip, &if_.esp);
 
   /* Set up user provided arguments to the stack. */
-  int args_val = setup_args (file_name, &if_.esp);
+  int args_val = setup_args (cmd_line, &if_.esp);
 
   /* If load failed, quit. */
-  palloc_free_page (file_name);
+  palloc_free_page (line_copy);
+  palloc_free_page (cmd_line);
   if (!success || args_val == -1)
     sys_exit (-1);
 
@@ -420,11 +428,10 @@ load (const char *file_name, void (**eip) (void), void **esp)
   process_activate ();
 
   /* Open executable file. */
-  /* Note that t->name stores executable file name without arguments. */
-  file = filesys_open (t->name);
+  file = filesys_open (file_name);
   if (file == NULL) 
     {
-      printf ("load: %s: open failed\n", t->name);
+      printf ("load: %s: open failed\n", file_name);
       goto done; 
     }
 

@@ -33,7 +33,8 @@ enum
     /* Project 5 only. */
     SYS_FORK,
     SYS_DUP2,
-    SYS_PIPE
+    SYS_PIPE,
+    SYS_EXEC2,
   };
 
 #endif /* lib/syscall-nr.h */

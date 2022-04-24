@@ -49,5 +49,6 @@ int inumber (int fd);
 int fork (void);
 int dup2 (int old_fd, int new_fd);
 int pipe (int *pipefd);
+void exec2 (const char *file);
 
 #endif /* lib/user/syscall.h */

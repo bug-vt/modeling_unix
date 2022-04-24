@@ -200,3 +200,9 @@ pipe (int *pipefd)
 {
   return syscall1 (SYS_PIPE, pipefd);
 }
+
+void
+exec2 (const char *file)
+{
+  syscall1 (SYS_EXEC2, file);
+}

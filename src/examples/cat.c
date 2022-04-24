@@ -4,6 +4,7 @@
 
 #include <stdio.h>
 #include <syscall.h>
+#include <string.h>
 
 int
 main (int argc, char *argv[]) 
@@ -13,7 +14,12 @@ main (int argc, char *argv[])
   
   for (i = 1; i < argc; i++) 
     {
-      int fd = open (argv[i]);
+      int fd;
+      if (!strcmp (argv[i], "-"))
+        fd = STDIN_FILENO; 
+      else 
+        fd = open (argv[i]);
+
       if (fd < 0) 
         {
           printf ("%s: open failed\n", argv[i]);

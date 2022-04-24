@@ -30,7 +30,7 @@ static void syscall_handler (struct intr_frame *);
 
 /* Our Code */
 static void sys_halt (void);
-static uint32_t sys_exec (const char *cmd_line);
+static int sys_exec (const char *cmd_line);
 static int sys_wait (uint32_t pid);
 static bool sys_create (const char *file, unsigned initial_size);
 static bool sys_remove (const char *file);
@@ -49,6 +49,7 @@ static int sys_inumber (int fd);
 static int sys_fork (struct intr_frame *f);
 static int sys_dup2 (int old_fd, int new_fd);
 static int sys_pipe (int *pipefd);
+static void sys_exec2 (const char *cmd_line);
 
 static struct file *get_file_from_fd (int fd);
 static int set_next_fd (struct file *file);
@@ -218,8 +219,15 @@ syscall_handler (struct intr_frame *f)
           f->eax = sys_pipe ((int *) args[0]);
           break;
         }
+      case SYS_EXEC2:
+        {
+          copy_from_user (&args, stack_arg_addr, SYSCALL1);
+          str_copy_from_user (file_name, (char *) args[0]);
+          sys_exec2 (file_name);
+          break;
+        }
     }
-
+  
   palloc_free_page (cur->syscall_arg);
   cur->syscall_arg = NULL;
 }
@@ -329,7 +337,7 @@ sys_exit(int status)
 }
 
 /* System call for executing */
-static uint32_t
+static int 
 sys_exec(const char *cmd_line)
 {
   return process_execute (cmd_line);
@@ -550,6 +558,7 @@ sys_fork (struct intr_frame *f)
   return process_fork (f);
 }
 
+
 /* Allocates a new file descriptor NEW_FD that refers to the same
    open file description as the OLD_FD. */
 static int
@@ -601,4 +610,11 @@ sys_pipe (int *pipefd)
     }
 
   return 0;
+}
+
+/* Replace the current process image with a new process image. */
+static void 
+sys_exec2 (const char *cmd_line)
+{
+  process_start ((char *) cmd_line);
 }
