@@ -5,7 +5,7 @@ SRCDIR = ..
 # and then add a name_SRC line that lists its source files.
 PROGS = cat cmp cp echo halt hex-dump ls mcat mcp mkdir pwd rm shell \
 	bubsort insult lineup matmult recursor fork fork2 dup dup-stdin \
-	dup-stdout pipe fork-exec fork-dup-exec
+	dup-stdout pipe fork-exec fork-dup-exec sbrk
 
 # Should work from project 2 onward.
 cat_SRC = cat.c
@@ -40,6 +40,7 @@ dup-stdout_SRC = dup-stdout.c
 pipe_SRC = pipe.c
 fork-exec_SRC = fork-exec.c
 fork-dup-exec_SRC = fork-dup-exec.c
+sbrk_SRC = sbrk.c
 
 include $(SRCDIR)/Make.config
 include $(SRCDIR)/Makefile.userprog

@@ -10,6 +10,5 @@ void process_start (void *file_name) NO_RETURN;
 int process_wait (tid_t);
 void process_exit (void);
 void process_activate (void);
-void set_status (int status);
 
 #endif /* userprog/process.h */

@@ -50,5 +50,6 @@ int fork (void);
 int dup2 (int old_fd, int new_fd);
 int pipe (int *pipefd);
 void exec2 (const char *file);
+void *sbrk (intptr_t increment);
 
 #endif /* lib/user/syscall.h */

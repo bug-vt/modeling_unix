@@ -35,6 +35,7 @@ enum
     SYS_DUP2,
     SYS_PIPE,
     SYS_EXEC2,
+    SYS_SBRK,
   };
 
 #endif /* lib/syscall-nr.h */

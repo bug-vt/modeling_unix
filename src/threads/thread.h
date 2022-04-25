@@ -151,6 +151,9 @@ struct thread
 
   struct dir *current_dir; /* Current working directory. */
 
+  uintptr_t heap_start; /* Keep track of start of the heap. */
+  uintptr_t heap_end; /* Keep track of end of the heap. */
+
   /* Owned by thread.c. */
   unsigned magic; /* Detects stack overflow. */
 };

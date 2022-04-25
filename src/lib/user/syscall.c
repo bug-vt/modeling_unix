@@ -206,3 +206,9 @@ exec2 (const char *file)
 {
   syscall1 (SYS_EXEC2, file);
 }
+
+void *
+sbrk (intptr_t increment)
+{
+  return (void *) syscall1 (SYS_SBRK, increment);
+}

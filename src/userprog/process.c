@@ -93,7 +93,7 @@ dup_process (void *copy_)
   /* Set return value to 0. */
   if_.eax = 0;
 
-  /* Allocate and activate page directory. */
+  /* Copy page directory from parent and activate page directory. */
   t->pagedir = pagedir_copy (copy->pagedir);
   if (t->pagedir == NULL) 
     goto dup_done;
@@ -411,7 +411,7 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
    Stores the executable's entry point into *EIP
    and its initial stack pointer into *ESP.
    Returns true if successful, false otherwise. */
-bool
+static bool
 load (const char *file_name, void (**eip) (void), void **esp) 
 {
   struct thread *t = thread_current ();
@@ -452,6 +452,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
       goto done; 
     }
 
+  uintptr_t heap_start = 0;
   /* Read program headers. */
   file_ofs = ehdr.e_phoff;
   for (i = 0; i < ehdr.e_phnum; i++) 
@@ -504,12 +505,21 @@ load (const char *file_name, void (**eip) (void), void **esp)
               if (!load_segment (file, file_page, (void *) mem_page,
                                  read_bytes, zero_bytes, writable))
                 goto done;
+              
+              uint32_t segment_end = mem_page + read_bytes + zero_bytes;
+              if (segment_end > heap_start)
+                heap_start = segment_end;
             }
           else
             goto done;
           break;
         }
     }
+
+  /* Set the start of the heap right after the end of BSS. */
+  heap_start += PGSIZE;
+  t->heap_start = heap_start;
+  t->heap_end = heap_start;
 
   /* Set up stack. */
   if (!setup_stack (esp))
@@ -636,6 +646,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       zero_bytes -= page_zero_bytes;
       upage += PGSIZE;
     }
+
   return true;
 }
 

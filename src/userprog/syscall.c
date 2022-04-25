@@ -20,6 +20,7 @@
 #include "filesys/directory.h"
 #include "lib/user/syscall.h"
 #include "filesys/pipe.h"
+#include "vm/mem.h"
 
 #define WORD_SIZE 4
 #define SYSCALL1 WORD_SIZE 
@@ -50,6 +51,7 @@ static int sys_fork (struct intr_frame *f);
 static int sys_dup2 (int old_fd, int new_fd);
 static int sys_pipe (int *pipefd);
 static void sys_exec2 (const char *cmd_line);
+static uintptr_t sys_sbrk (intptr_t increment);
 
 static struct file *get_file_from_fd (int fd);
 static int set_next_fd (struct file *file);
@@ -224,6 +226,12 @@ syscall_handler (struct intr_frame *f)
           copy_from_user (&args, stack_arg_addr, SYSCALL1);
           str_copy_from_user (file_name, (char *) args[0]);
           sys_exec2 (file_name);
+          break;
+        }
+      case SYS_SBRK:
+        {
+          copy_from_user (&args, stack_arg_addr, SYSCALL1);
+          f->eax = sys_sbrk (args[0]);
           break;
         }
     }
@@ -617,4 +625,13 @@ static void
 sys_exec2 (const char *cmd_line)
 {
   process_start ((char *) cmd_line);
+}
+
+/* Change the location of the program break.
+   Increasing the program break has the effect of allocating memory
+   to the process. */
+static uintptr_t 
+sys_sbrk (intptr_t increment)
+{
+  return mem_sbrk (increment);
 }
