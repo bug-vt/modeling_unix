@@ -15,7 +15,7 @@ main (void)
       char command[80];
 
       /* Read command. */
-      printf ("--");
+      printf ("> ");
       read_line (command, sizeof command);
       
       /* Execute command. */
