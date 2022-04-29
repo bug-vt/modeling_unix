@@ -4,10 +4,13 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stddef.h>
-#include <assert.h>
+#include <debug.h>
+#include <syscall.h>
 
 #include "malloc.h"
 #include "lib/kernel/list.h"
+
+#define ALIGNMENT 16
 
 struct boundary_tag {
     int inuse:1;        // inuse bit
@@ -106,14 +109,14 @@ static size_t blk_size(struct block *blk) {
    Not meaningful for left-most block. */
 static struct block *prev_blk(struct block *blk) {
     struct boundary_tag *prevfooter = prev_blk_footer(blk);
-    assert(prevfooter->size != 0);
+    ASSERT(prevfooter->size != 0);
     return (struct block *)((void *)blk - WSIZE * prevfooter->size);
 }
 
 /* Given a block, obtain pointer to next block.
    Not meaningful for right-most block. */
 static struct block *next_blk(struct block *blk) {
-    assert(blk_size(blk) != 0);
+    ASSERT(blk_size(blk) != 0);
     return (struct block *)((void *)blk + WSIZE * blk->header.size);
 }
 
@@ -149,10 +152,10 @@ static void mark_block_free(struct block *blk, int size) {
  */
 int mm_init(void) 
 {
-    assert (offsetof(struct block, payload) == 4);
-    assert (sizeof(struct boundary_tag) == 4);
+    ASSERT (offsetof(struct block, payload) == 4);
+    ASSERT (sizeof(struct boundary_tag) == 4);
     /* Create the initial empty heap */
-    struct boundary_tag * initial = mem_sbrk(4 * sizeof(struct boundary_tag));
+    struct boundary_tag * initial = sbrk(4 * sizeof(struct boundary_tag));
     if (initial == (void *)-1)
         return -1;
 
@@ -179,7 +182,7 @@ int mm_init(void)
 }
 
 /* 
- * mm_malloc - Allocate a block with at least size bytes of payload 
+ * malloc - Allocate a block with at least size bytes of payload 
  */
 void *malloc(size_t size)
 {
@@ -209,11 +212,11 @@ void *malloc(size_t size)
 } 
 
 /* 
- * mm_free - Free a block 
+ * free - Free a block 
  */
 void free(void *bp)
 {
-    assert (heap_listp != 0);       // assert that mm_init was called
+    ASSERT (heap_listp != 0);       // assert that mm_init was called
     if (bp == 0) 
         return;
 
@@ -285,18 +288,20 @@ void *realloc(void *ptr, size_t size)
 {
     /* If size == 0 then this is just free, and we return NULL. */
     if (size == 0) {
-        mm_free(ptr);
+        free(ptr);
         return 0;
     }
 
     /* If oldptr is NULL, then this is just malloc. */
     if (ptr == NULL) {
-        return mm_malloc(size);
+        return malloc(size);
     }
 
     struct block *oldblock = ptr - offsetof(struct block, payload);
     size_t oldsize = blk_size(oldblock) * WSIZE;
 
+    //Adjusted block size in words
+    size_t use_size = align(size+2*sizeof(struct boundary_tag)) / WSIZE; 
     // realloc case 0
 
     if (use_size <= oldsize) {
@@ -375,7 +380,7 @@ void *realloc(void *ptr, size_t size)
         }
     }  
 
-    void *newptr = mm_malloc(size);
+    void *newptr = malloc(size);
 
     /* If realloc() fails the original block is left untouched  */
     if (!newptr) {
@@ -387,7 +392,7 @@ void *realloc(void *ptr, size_t size)
     memcpy(newptr, ptr, oldsize);
 
     /* Free the old block. */
-    mm_free(ptr);
+    free(ptr);
     return newptr;
 }
 
@@ -415,7 +420,7 @@ static struct block *extend_heap(size_t words, bool coal)
     /* Initialize free block header/footer and the epilogue header.
      * Note that we overwrite the previous epilogue here. */
     struct block * blk = bp - sizeof(FENCE);
-    mark_block_free(blk, alloc);
+    mark_block_free(blk, words);
     next_blk(blk)->header = FENCE;
 
     struct list * temp = get_list(blk->header.size);

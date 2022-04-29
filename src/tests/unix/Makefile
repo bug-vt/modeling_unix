@@ -4,7 +4,7 @@ SRCDIR = ../..
 # To add a new test, put its name on the PROGS list
 # and then add a name_SRC line that lists its source files.
 PROGS = fork fork2 dup dup-stdin dup-stdout pipe fork-exec fork-dup-exec \
-		sbrk 
+		sbrk malloc
 
 # Should work in project 5.
 fork_SRC = fork.c
@@ -16,6 +16,7 @@ pipe_SRC = pipe.c
 fork-exec_SRC = fork-exec.c
 fork-dup-exec_SRC = fork-dup-exec.c
 sbrk_SRC = sbrk.c
+malloc_SRC = malloc.c
 
 include $(SRCDIR)/Make.config
 include $(SRCDIR)/Makefile.userprog
