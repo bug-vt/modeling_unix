@@ -20,4 +20,8 @@ void *binary_search (const void *key, const void *array, size_t cnt,
                      void *aux);
 extern long long llabs (long long);
 
+extern void *malloc (size_t size);
+extern void free (void *ptr);
+extern void *realloc(void *ptr, size_t size);
+
 #endif /* lib/stdlib.h */

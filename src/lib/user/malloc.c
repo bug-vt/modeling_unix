@@ -7,7 +7,6 @@
 #include <debug.h>
 #include <syscall.h>
 
-#include "malloc.h"
 #include "lib/kernel/list.h"
 
 #define ALIGNMENT 16
@@ -61,7 +60,7 @@ static bool is_aligned(size_t size) {
 static struct block *heap_listp = 0;    /* Pointer to first block */
 #define NUM_LISTS 16   /* The size of the list array */
 static struct list seg_list[NUM_LISTS]; /* A list array that simulates segregated free list */
-static int sizes[16] = {
+static size_t sizes[16] = {
     8,      /* 0 */
     24,     /* 1 */
     48,     /* 2 */
@@ -81,6 +80,7 @@ static int sizes[16] = {
 }; 
 
 /* Function prototypes for internal helper routines */
+static int mm_init (void);
 static struct block *extend_heap(size_t words, bool coal);
 static void place(struct block *bp, size_t asize);
 static struct block *find_fit(size_t asize);
@@ -150,7 +150,7 @@ static void mark_block_free(struct block *blk, int size) {
 /* 
  * mm_init - Initialize the memory manager 
  */
-int mm_init(void) 
+static int mm_init(void) 
 {
     ASSERT (offsetof(struct block, payload) == 4);
     ASSERT (sizeof(struct boundary_tag) == 4);
@@ -186,6 +186,9 @@ int mm_init(void)
  */
 void *malloc(size_t size)
 {
+    if (heap_listp == 0)
+      mm_init();
+
     struct block *bp;      
 
     /* Ignore spurious requests */
@@ -282,10 +285,13 @@ static struct block *coalesce(struct block *bp)
 }
 
 /*
- * mm_realloc - Naive implementation of realloc
+ * realloc - Naive implementation of realloc
  */
 void *realloc(void *ptr, size_t size)
 {
+    if (heap_listp == 0)
+      mm_init();
+
     /* If size == 0 then this is just free, and we return NULL. */
     if (size == 0) {
         free(ptr);
@@ -394,13 +400,6 @@ void *realloc(void *ptr, size_t size)
     /* Free the old block. */
     free(ptr);
     return newptr;
-}
-
-/* 
- * checkheap - We don't check anything right now. 
- */
-void mm_checkheap(int verbose)
-{ 
 }
 
 /* 
