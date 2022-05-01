@@ -18,10 +18,8 @@ Fork(void)
 
     if ((pid = fork()) < 0)
     {
-        printf ("Fork error");
-        exit (-1);
-        //perror("Fork error");
-        //exit(errno);
+        perror("Fork error");
+        exit(errno);
     }
     return pid;
 }
@@ -36,10 +34,8 @@ Pipe(int *pipe_end)
 {
     if (pipe(pipe_end) == -1)
     {
-        printf ("Pipe error");
-        exit (-1);
-        //perror("Pipe error");
-        //exit(errno);
+        perror("Pipe error");
+        exit(errno);
     }
 }
 
@@ -54,8 +50,7 @@ Write(int fd, const void *buf, size_t n)
 {
     if (write(fd, buf, n) == -1)
     {
-        printf ("Write error");
-        //perror("Write error");
+        perror("Write error");
     }
 }
 
@@ -70,10 +65,8 @@ Dup2(int old_fd, int new_fd)
 {
     if (dup2(old_fd, new_fd) == -1)
     {
-        printf ("Dup2 error");
-        exit (-1);
-        //perror("Dup2 error");
-        //exit(errno);
+        perror("Dup2 error");
+        exit(errno);
     }
 }
 
@@ -86,10 +79,8 @@ Wait(int statusp)
 {
     if (wait(statusp) == -1)
     {
-        printf ("wait error");
-        exit (-1);
-        //perror("Wait error");
-        //exit(errno);
+        perror("Wait error");
+        exit(errno);
     }
 }
    
@@ -97,8 +88,7 @@ void
 Chdir(const char *path) 
 {
     if (!chdir(path)) {
-        printf ("cd error");
-        //perror("cd error");
+        perror("cd error");
     }
 }
 
@@ -107,10 +97,8 @@ Open(char *filename)
 {
   int fd = open(filename);
   if (fd < 0) {
-      printf ("Open error");
-      exit (-1);
-      //perror("Open error");
-      //exit(errno);
+      perror("Open error");
+      exit(errno);
   }
   return fd;
 }

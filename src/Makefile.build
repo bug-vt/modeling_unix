@@ -60,6 +60,7 @@ lib_SRC += lib/string.c			# String functions.
 lib_SRC += lib/arithmetic.c		# 64-bit arithmetic for GCC.
 lib_SRC += lib/ustar.c			# Unix standard tar format utilities.
 lib_SRC += lib/atomic-ops.c		# Atomic instructions
+lib_SRC += lib/user/errno.c
 
 # Kernel-specific library code.
 lib/kernel_SRC  = lib/kernel/debug.c	# Debug helpers.

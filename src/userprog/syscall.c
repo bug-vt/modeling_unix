@@ -21,6 +21,7 @@
 #include "lib/user/syscall.h"
 #include "filesys/pipe.h"
 #include "vm/mem.h"
+#include <user/errno.h>
 
 #define WORD_SIZE 4
 #define SYSCALL1 WORD_SIZE 
@@ -379,10 +380,10 @@ sys_open(const char* filename)
 {
   struct file *file = filesys_open (filename);
   if (file == NULL)
-    return -1;
+    return -EINVF;
 
   int fd = set_next_fd (file);
-  if (fd == -1)
+  if (fd == -EMFILE)
     file_close (file);
 
   return fd;
@@ -394,9 +395,8 @@ sys_filesize(int fd)
 {
   struct file *file = get_file_from_fd (fd);
   if (file == NULL)
-    {
-      return -1;
-    }
+    return -EINVF;
+
   int size = (int)file_length(file);
   return size;
 }
@@ -406,9 +406,6 @@ static int
 sys_read(int fd, void *buffer, unsigned size)
 {
   struct file *file = get_file_from_fd (fd);
-  /* Reject if fd is invalid or if fd is directory. */
-  if (file == NULL || file_get_directory (file) != NULL)
-    return -1;
 
   int read = file_read (file, buffer, size);
   
@@ -420,9 +417,6 @@ static int
 sys_write(int fd, const void *buffer, unsigned size)
 {
   struct file *file = get_file_from_fd (fd);
-  /* Reject if fd is invalid or if fd is directory. */
-  if (file == NULL || file_get_directory (file) != NULL)
-    return -1;
 
   int written = file_write (file, buffer, size);
 
@@ -435,9 +429,8 @@ sys_seek(int fd, unsigned position)
 {
   struct file *file = get_file_from_fd (fd);
   if (file == NULL)
-    {
-      sys_exit (-1);
-    }
+    sys_exit (-1);
+
   file_seek (file, position);
 }
 
@@ -447,9 +440,8 @@ sys_tell(int fd)
 {
   struct file *file = get_file_from_fd (fd);
   if (file == NULL)
-    {
-      return -1;
-    }
+    return -EINVF;
+
   int position = (unsigned)file_tell (file);
   return position;
 }
@@ -494,7 +486,7 @@ set_next_fd (struct file *file)
           return fd;
         } 
     }
-  return -1;
+  return -EMFILE;
 }
 
 /* Changes the current working directory of the process to dir,

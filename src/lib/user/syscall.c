@@ -1,5 +1,6 @@
 #include <syscall.h>
 #include "../syscall-nr.h"
+#include <errno.h>
 
 /* Invokes syscall NUMBER, passing no arguments, and returns the
    return value as an `int'. */
@@ -11,7 +12,7 @@
                : "=a" (retval)                                  \
                : [number] "i" (NUMBER)                          \
                : "memory");                                     \
-          retval;                                               \
+          retval < 0 ? errno=-retval, -1 : retval;              \
         })
 
 /* Invokes syscall NUMBER, passing argument ARG0, and returns the
@@ -25,7 +26,7 @@
                : [number] "i" (NUMBER),                                  \
                  [arg0] "g" (ARG0)                                       \
                : "memory");                                              \
-          retval;                                                        \
+          retval < 0 ? errno=-retval, -1 : retval;                       \
         })
 
 /* Invokes syscall NUMBER, passing arguments ARG0 and ARG1, and
@@ -41,7 +42,7 @@
                  [arg0] "r" (ARG0),                             \
                  [arg1] "r" (ARG1)                              \
                : "memory");                                     \
-          retval;                                               \
+          retval < 0 ? errno=-retval, -1 : retval;              \
         })
 
 /* Invokes syscall NUMBER, passing arguments ARG0, ARG1, and
@@ -58,7 +59,7 @@
                  [arg1] "r" (ARG1),                             \
                  [arg2] "r" (ARG2)                              \
                : "memory");                                     \
-          retval;                                               \
+          retval < 0 ? errno=-retval, -1 : retval;              \
         })
 
 void

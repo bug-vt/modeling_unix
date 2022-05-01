@@ -8,10 +8,15 @@
 #include "lib/kernel/queue.h"
 #include "stdio.h"
 #include "devices/input.h"
+#include <user/errno.h>
 
 
 static struct list open_files;
 static struct lock open_files_lock;
+
+
+static int read_error (struct file *file);
+static int write_error (struct file *file);
 
 /* An open file. */
 struct file 
@@ -144,6 +149,21 @@ file_dup (struct file *file)
   return file;
 }
 
+/* If given file is invalid for read, return corresponding error number 
+   specified in errno.h */
+static int
+read_error (struct file *file)
+{
+  if (!file)
+    return EINVF;
+  if (file->type == PIPE && file != pipe_read_end (file->pipe))
+    return EBADF;
+  if (file->type == DIR)
+    return EISDIR;
+
+  return 0;
+}
+
 /* Reads SIZE bytes from FILE into BUFFER,
    starting at the file's current position.
    Returns the number of bytes actually read,
@@ -152,6 +172,10 @@ file_dup (struct file *file)
 off_t
 file_read (struct file *file, void *buffer, off_t size) 
 {
+  int error = read_error (file);
+  if (error)
+    return -error;
+
   off_t bytes_read = -1;
   if (file->type == STDIN)
     {
@@ -161,7 +185,7 @@ file_read (struct file *file, void *buffer, off_t size)
     }
   else if (file->type == STDOUT)
     return 0;
-  else if (file->type == PIPE && file == pipe_read_end (file->pipe))
+  else if (file->type == PIPE)
     bytes_read = pipe_read (file->pipe, buffer, size);
   else if (file->type == REG)
     {
@@ -182,6 +206,21 @@ file_read_at (struct file *file, void *buffer, off_t size, off_t file_ofs)
   return inode_read_at (file->inode, buffer, size, file_ofs);
 }
 
+/* If given file is invalid for write, return corresponding error number 
+   specified in errno.h */
+static int
+write_error (struct file *file)
+{
+  if (!file)
+    return EINVF;
+  if (file->type == PIPE && file != pipe_write_end (file->pipe))
+    return EBADF;
+  if (file->type == DIR)
+    return EISDIR;
+
+  return 0;
+}
+
 /* Writes SIZE bytes from BUFFER into FILE,
    starting at the file's current position.
    Returns the number of bytes actually written,
@@ -192,6 +231,10 @@ file_read_at (struct file *file, void *buffer, off_t size, off_t file_ofs)
 off_t
 file_write (struct file *file, const void *buffer, off_t size) 
 {
+  int error = write_error (file);
+  if (error)
+    return -error;
+
   off_t bytes_written = -1;
   if (file->type == STDIN)
     return 0;
@@ -200,7 +243,7 @@ file_write (struct file *file, const void *buffer, off_t size)
       putbuf (buffer, size);
       bytes_written = size;
     }
-  else if (file->type == PIPE && file == pipe_write_end (file->pipe))
+  else if (file->type == PIPE)
     bytes_written = pipe_write (file->pipe, buffer, size);
   else if (file->type == REG)
     {
