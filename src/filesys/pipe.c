@@ -195,3 +195,17 @@ pipe_write (struct pipe *pipe, const void *buffer_, off_t size)
 
   return bytes_written;
 }
+
+/* Return read end of the pipe. */
+struct file *
+pipe_read_end (struct pipe *pipe)
+{
+  return pipe->read_end;
+}
+
+/* Return write end of the pipe. */
+struct file *
+pipe_write_end (struct pipe *pipe)
+{
+  return pipe->write_end;
+}

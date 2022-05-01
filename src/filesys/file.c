@@ -152,7 +152,7 @@ file_dup (struct file *file)
 off_t
 file_read (struct file *file, void *buffer, off_t size) 
 {
-  off_t bytes_read;
+  off_t bytes_read = -1;
   if (file->type == STDIN)
     {
       char *buf = buffer;
@@ -161,9 +161,9 @@ file_read (struct file *file, void *buffer, off_t size)
     }
   else if (file->type == STDOUT)
     return 0;
-  else if (file->type == PIPE)
+  else if (file->type == PIPE && file == pipe_read_end (file->pipe))
     bytes_read = pipe_read (file->pipe, buffer, size);
-  else
+  else if (file->type == REG)
     {
       bytes_read = inode_read_at (file->inode, buffer, size, file->pos);
       file->pos += bytes_read;
@@ -192,7 +192,7 @@ file_read_at (struct file *file, void *buffer, off_t size, off_t file_ofs)
 off_t
 file_write (struct file *file, const void *buffer, off_t size) 
 {
-  off_t bytes_written;
+  off_t bytes_written = -1;
   if (file->type == STDIN)
     return 0;
   else if (file->type == STDOUT)
@@ -200,9 +200,9 @@ file_write (struct file *file, const void *buffer, off_t size)
       putbuf (buffer, size);
       bytes_written = size;
     }
-  else if (file->type == PIPE)
+  else if (file->type == PIPE && file == pipe_write_end (file->pipe))
     bytes_written = pipe_write (file->pipe, buffer, size);
-  else
+  else if (file->type == REG)
     {
       bytes_written = inode_write_at (file->inode, buffer, size, file->pos);
       file->pos += bytes_written;

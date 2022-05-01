@@ -37,5 +37,7 @@ bool pipe_open (struct file **read_end, struct file **write_end);
 void pipe_close (struct pipe *, struct file *);
 int pipe_read (struct pipe *pipe, void *buffer_, off_t size);
 int pipe_write (struct pipe *pipe, const void *buffer_, off_t size);
+struct file *pipe_read_end (struct pipe *);
+struct file *pipe_write_end (struct pipe *);
 
 #endif /* filesys/pipe.h */
