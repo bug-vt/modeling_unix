@@ -5,6 +5,7 @@
 
 static void read_line (char line[], size_t);
 static bool backspace (char **pos, char line[]);
+static void move_cursor (char c, char **pos, char line[], size_t size);
 
 int
 main (void)
@@ -64,13 +65,21 @@ read_line (char line[], size_t size)
           putchar ('\n');
           return;
 
-        case '\b':
+        case 127:   /* Back space */
+          backspace (&pos, line);
+          break;
+
+        case '\b':  /* Another back space? */
           backspace (&pos, line);
           break;
 
         case ('U' - 'A') + 1:       /* Ctrl+U. */
           while (backspace (&pos, line))
             continue;
+          break;
+
+        case 27:    /* Left or right arrow key */
+          move_cursor (c, &pos, line, size);
           break;
 
         default:
@@ -102,3 +111,24 @@ backspace (char **pos, char line[])
   else
     return false;
 }
+
+static void 
+move_cursor (char c, char **pos, char line[], size_t size)
+{
+  read (STDIN_FILENO, &c, 1);
+  read (STDIN_FILENO, &c, 1);
+  if (*pos > line && *pos < line + size  - 1)
+    {
+      if (c == 67)  /* Right arrow */
+        {
+          printf ("%c[C", 27); 
+          (*pos)++;
+        }
+      else if (c == 68) /* Left arrow */
+        {
+          printf ("\b");
+          (*pos)--;
+        }
+    }
+}
+
