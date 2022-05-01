@@ -11,7 +11,7 @@
 #
 
 # CHANGE this line to install a P3/P4 kernel
-BUILDDIR=./userprog/build
+BUILDDIR=./filesys/build
 EXAMPLEDIR=./examples
 DISKIMAGE=usbdisk.img
 
@@ -43,9 +43,10 @@ pintos -v -k --qemu \
         -p ${EXAMPLEDIR}/shell -a shell \
         -p ${EXAMPLEDIR}/ls -a ls \
         -p ${EXAMPLEDIR}/halt -a halt \
-        -p ${EXAMPLEDIR}/echo -a echo \
         -p ${EXAMPLEDIR}/cat -a cat \
         -p ${EXAMPLEDIR}/insult -a insult \
+        -p ${EXAMPLEDIR}/wc -a wc \
+        -p ${EXAMPLEDIR}/echo -a echo \
         -p ${EXAMPLEDIR}/shell.c -a shell.c \
         -- -q -f
 
