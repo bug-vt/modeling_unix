@@ -29,6 +29,8 @@ mcp_SRC = mcp.c
 mkdir_SRC = mkdir.c
 pwd_SRC = pwd.c
 shell_SRC = shell.c
+shell_SRC += parser.c
+shell_SRC += syscall_wrapper.c
 
 # Should work in project 5.
 

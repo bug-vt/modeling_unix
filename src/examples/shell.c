@@ -2,10 +2,13 @@
 #include <stdio.h>
 #include <string.h>
 #include <syscall.h>
+#include "parser.h"
+#include "syscall_wrapper.h"
 
 static void read_line (char line[], size_t);
 static bool backspace (char **pos, char line[]);
 static void move_cursor (char c, char **pos, char line[], size_t size);
+static bool built_in_command (char *cmd);
 
 int
 main (void)
@@ -18,27 +21,82 @@ main (void)
       /* Read command. */
       printf ("> ");
       read_line (command, sizeof command);
-      
-      /* Execute command. */
-      if (!strcmp (command, "exit"))
-        break;
-      else if (!memcmp (command, "cd ", 3)) 
-        {
-          if (!chdir (command + 3))
-            printf ("\"%s\": chdir failed\n", command + 3);
+
+      /* Parse command line group based on its placement with pipes. */
+      struct ast_command_line *cline = ast_parse_command_line(command);
+      if (list_empty(&cline->commands)) /* Empty input from user. */
+        {    
+          ast_command_line_free(cline);
+          continue;
         }
-      else if (command[0] == '\0') 
+
+      // Setting up pipes
+      int cmd_count = list_size (&cline->commands);
+      int cmd_index = 0;
+      int pipes[cmd_count][2];
+      for (int i = 0; i < cmd_count; i++) 
+        Pipe (pipes[i]);
+
+      int pids[cmd_count];
+      // Iterate over each command.
+      for (struct list_elem *e = list_begin (&cline->commands);
+           e != list_end (&cline->commands); ) 
         {
-          /* Empty command. */
+          struct ast_command *cmd = list_entry (e, struct ast_command, elem);
+          
+          if (built_in_command (cmd->command)) 
+            {
+              e = list_remove (e);
+              ast_command_free (cmd); 
+              continue;
+            }
+
+          // running non-built-in command 
+          pids[cmd_index] = Fork ();
+          /* Child */
+          if (pids[cmd_index] == 0) 
+            { 
+              // I/O piping 
+              if (list_size (&cline->commands) > 1) 
+                {
+                  /* First command in command line */
+                  if (e == list_begin (&cline->commands)) 
+                    Dup2 (pipes[cmd_index][WRITE_END], STDOUT_FILENO);
+                  /* Intermidiate command */
+                  else if (e == list_rbegin (&cline->commands)) 
+                    Dup2 (pipes[cmd_index - 1][READ_END], STDIN_FILENO);
+                  /* Last command */
+                  else 
+                    {
+                      Dup2 (pipes[cmd_index][WRITE_END], STDOUT_FILENO);
+                      Dup2 (pipes[cmd_index - 1][READ_END], STDIN_FILENO);
+                    }
+                }
+              for (int i = 0; i < cmd_count; i++) 
+                {
+                  close (pipes[i][READ_END]);
+                  close (pipes[i][WRITE_END]);
+                }
+
+              exec2 (cmd->command);
+            }
+          /* Parent */
+          /* Move on to next command in command line. */
+          e = list_next(e);
+          cmd_index++;
         }
-      else
+      /* parent */
+      for (int i = 0; i < cmd_count; i++) 
         {
-          pid_t pid = exec (command);
-          if (pid != PID_ERROR)
-            printf ("\"%s\": exit code %d\n", command, wait (pid));
-          else
-            printf ("exec failed\n");
+          close (pipes[i][READ_END]);
+          close (pipes[i][WRITE_END]);
         }
+
+      /* Wait for all child to finish. */
+      for (int i = 0; i < cmd_count; i++)
+        wait(pids[i]);
+  
+      ast_command_line_free(cline);
     }
 
   printf ("Shell exiting.");
@@ -132,3 +190,31 @@ move_cursor (char c, char **pos, char line[], size_t size)
     }
 }
 
+/* Checks if the given command match with the built-in command.
+   In that case, execute built-in. */
+static bool 
+built_in_command(char *command)
+{
+  bool is_built_in = true;
+
+  char *cmd_copy = malloc (strlen (command) + 1);
+  strlcpy (cmd_copy, command, strlen (command) + 1);
+ 
+  /* Truncate any white space. */
+  char *cmd, *save_ptr;
+  cmd = strtok_r (cmd_copy, " \t\r\n", &save_ptr);
+  /* Execute command. */
+  if (!strcmp (cmd, "exit"))
+    exit (0); 
+  else if (!strcmp (cmd, "cd")) 
+    {
+      char *path = strtok_r (NULL, " \t\r\n", &save_ptr);
+      if (!chdir (path))
+        printf ("\"%s\": chdir failed\n", command + 3);
+    }
+  else
+    is_built_in = false;
+
+  free (cmd_copy);
+  return is_built_in;
+}

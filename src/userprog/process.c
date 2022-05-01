@@ -203,9 +203,14 @@ process_start (void *file_name_)
   /* Set up user provided arguments to the stack. */
   int args_val = setup_args (cmd_line, &if_.esp);
 
-  /* If load failed, quit. */
+  /* If called by exec, cmd_line is a copy from parent. 
+     Setting syscall_arg of child to NULL have no effect on parent.
+     Otherwise, If called by exec2, cmd_line is syscall_arg from 
+     calling process. Once cmd_line is freed, syscall_arg must be NULL. */
   palloc_free_page (line_copy);
   palloc_free_page (cmd_line);
+  thread_current ()->syscall_arg = NULL;
+  /* If load failed, quit. */
   if (!success || args_val == -1)
     sys_exit (-1);
 
