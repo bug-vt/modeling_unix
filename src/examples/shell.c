@@ -78,6 +78,21 @@ main (void)
                   close (pipes[i][WRITE_END]);
                 }
 
+              // I/O redirection
+              if (cmd->iored_input) 
+                {
+                  close(STDIN_FILENO);
+                  Open(cmd->iored_input);
+                }
+              if (cmd->iored_output) 
+                {
+                  close(STDOUT_FILENO);
+                  create (cmd->iored_output, 0);
+                  int fd = Open(cmd->iored_output);
+                  if (cmd->append_to_output)
+                    seek (fd, filesize (fd));
+                }
+
               exec2 (cmd->command);
             }
           /* Parent */

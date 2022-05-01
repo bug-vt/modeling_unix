@@ -179,6 +179,7 @@ exec_done:
 void
 process_start (void *file_name_)
 {
+  struct thread *cur = thread_current ();
   char *cmd_line = file_name_;
   struct intr_frame if_;
   bool success;
@@ -199,6 +200,7 @@ process_start (void *file_name_)
   if_.eflags = FLAG_IF | FLAG_MBS;
 
   success = load (exec_name, &if_.eip, &if_.esp);
+  strlcpy (cur->name, exec_name, sizeof cur->name);
 
   /* Set up user provided arguments to the stack. */
   int args_val = setup_args (cmd_line, &if_.esp);
@@ -209,7 +211,7 @@ process_start (void *file_name_)
      calling process. Once cmd_line is freed, syscall_arg must be NULL. */
   palloc_free_page (line_copy);
   palloc_free_page (cmd_line);
-  thread_current ()->syscall_arg = NULL;
+  cur->syscall_arg = NULL;
   /* If load failed, quit. */
   if (!success || args_val == -1)
     sys_exit (-1);

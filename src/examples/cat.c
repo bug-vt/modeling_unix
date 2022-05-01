@@ -11,13 +11,17 @@ main (int argc, char *argv[])
 {
   bool success = true;
   int i;
+  int fd = -1;
+
+  if (argc == 1)
+    fd = STDIN_FILENO;
   
-  for (i = 1; i < argc; i++) 
+  for (i = 0; i < argc; i++) 
     {
-      int fd;
-      if (!strcmp (argv[i], "-"))
-        fd = STDIN_FILENO; 
-      else 
+      if (i == 0 && fd == -1)
+        continue;
+
+      if (i > 0)
         fd = open (argv[i]);
 
       if (fd < 0) 
