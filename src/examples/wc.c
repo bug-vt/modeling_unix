@@ -1,6 +1,8 @@
 #include <syscall.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
+#include <inttypes.h>
 
 static int flag = 0x7;      /* There will be four flags, 0x1, 0x2, 0x3, and 0x4. 
                                These flags will determine the output of the program. 
@@ -14,18 +16,19 @@ static long byte_count = 0;
 static long char_count = 0;
 static long line_count = 0;
 
-static int
+static void
 parse_input (void)
 {
-  void *buf;
+  uint8_t *buf = malloc (sizeof (uint8_t));
   size_t size;
-  while ((size = read(file_descriptor, buf, 1))) {
+  while ((size = read (file_descriptor, buf, 1))) {
     byte_count ++;
-    if (!(buf & 0x80))
+    if (!(*buf & 0x80))
       char_count ++;
     if (*((char*)buf) == '\n')
       line_count ++;
   }
+  free (buf);
 }
 
 
