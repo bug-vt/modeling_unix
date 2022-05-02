@@ -27,6 +27,8 @@ main (int argc, char** argv)
   while (read(STDIN_FILENO, &in_buffer, 1))
   { 
     
+    //printf("%c - %d\n", in_buffer, (int)in_buffer);
+
     out_size = append_to(&in_buffer, 1, &out_buffer, out_index, out_size);
     out_index += 1;
     
@@ -42,12 +44,12 @@ main (int argc, char** argv)
     {
       check_size = 0;
 
-      if ((int)(in_buffer) == 13)
+      if ((int)(in_buffer) == 13 | (int)(in_buffer) == 10 )
       {
 	*(out_buffer - 1 + out_index) = '\0';
         if (has_target)
         {
-	  printf("%s", out_buffer);
+	  printf("%s\n", out_buffer);
 	}
 	out_index = 0;
         has_target = false;
