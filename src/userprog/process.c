@@ -525,7 +525,6 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
   /* Set the start of the heap right after the end of BSS. */
   heap_start += PGSIZE;
-  t->heap_start = heap_start;
   t->heap_end = heap_start;
 
   /* Set up stack. */

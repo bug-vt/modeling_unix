@@ -91,7 +91,11 @@ wait (pid_t pid)
 bool
 create (const char *file, unsigned initial_size)
 {
-  return syscall2 (SYS_CREATE, file, initial_size);
+  int success = syscall2 (SYS_CREATE, file, initial_size);
+  if (success < 0)
+    return false;
+
+  return success;
 }
 
 bool
@@ -212,4 +216,16 @@ void *
 sbrk (intptr_t increment)
 {
   return (void *) syscall1 (SYS_SBRK, increment);
+}
+
+int64_t
+times (void)
+{
+  return syscall0 (SYS_TIMES);
+}
+
+void
+sleep (int64_t ticks)
+{
+  syscall1 (SYS_SLEEP, ticks);
 }

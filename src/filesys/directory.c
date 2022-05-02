@@ -8,6 +8,7 @@
 #include "threads/palloc.h"
 #include "threads/vaddr.h"
 #include "threads/thread.h"
+#include <user/errno.h>
 
 /* A directory. */
 struct dir 
@@ -233,7 +234,10 @@ dir_add (struct dir *dir, const char *name, block_sector_t inode_sector)
 
   /* Check NAME for validity. */
   if (*name == '\0' || strlen (name) > NAME_MAX)
-    return false;
+    {
+      thread_current ()->errno = ENAME;
+      return false;
+    }
 
   inode_lock_acquire (dir->inode);
   /* Check that NAME is not in use. */
