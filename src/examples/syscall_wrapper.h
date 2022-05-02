@@ -28,5 +28,6 @@ void Dup2(int old_fd, int new_fd);
 void Wait(int statusp);
 void Chdir(const char *path);
 int Open(char *filename);
+bool Create(const char *file, unsigned initial_size);
 
 #endif

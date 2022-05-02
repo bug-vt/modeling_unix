@@ -103,3 +103,15 @@ Open(char *filename)
   return fd;
 }
 
+bool
+Create(const char *filename, unsigned initial_size)
+{
+  bool success = create(filename, initial_size);
+  if (!success)
+    {
+      perror("Create error");
+      exit(errno);
+    }
+  return success;
+}
+

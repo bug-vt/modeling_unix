@@ -657,7 +657,7 @@ idle (void *idle_started_ UNUSED)
        *
        * The baseline implementation does not ensure this.
        */
-      balance_load ();
+      //balance_load ();
       thread_block (NULL);
 
       /* Re-enable interrupts and wait for the next one.
