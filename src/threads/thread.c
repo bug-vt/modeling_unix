@@ -657,7 +657,7 @@ idle (void *idle_started_ UNUSED)
        *
        * The baseline implementation does not ensure this.
        */
-      balance_load ();
+      //balance_load ();
       thread_block (NULL);
 
       /* Re-enable interrupts and wait for the next one.
@@ -756,6 +756,7 @@ init_thread (struct thread *t, const char *name, int nice)
   list_init (&t->children);
   t->syscall_arg = NULL;
   t->current_dir = NULL;
+  t->errno = 0;
   t->magic = THREAD_MAGIC;
   if (cpu_can_acquire_spinlock)
     spinlock_acquire (&all_lock);

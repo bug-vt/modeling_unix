@@ -14,7 +14,7 @@ main (void)
       dup2 (p[0], STDIN_FILENO);
       close (p[0]);
       close (p[1]);
-      exec2 ("cat -");
+      exec2 ("cat");
       printf ("(child) should not reach here.\n");
     }
   else if (pid > 0)

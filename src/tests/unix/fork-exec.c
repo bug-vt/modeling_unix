@@ -14,7 +14,7 @@ main (void)
       write (fd, "hello world\n", 12);
       seek (fd, 0);
 
-      exec2 ("cat -");
+      exec2 ("cat");
       printf ("(child) should not reach here.\n");
     }
   else if (pid > 0)

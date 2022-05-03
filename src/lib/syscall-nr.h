@@ -36,6 +36,8 @@ enum
     SYS_PIPE,
     SYS_EXEC2,
     SYS_SBRK,
+    SYS_TIMES,
+    SYS_SLEEP,
   };
 
 #endif /* lib/syscall-nr.h */

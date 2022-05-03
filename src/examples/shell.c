@@ -81,14 +81,17 @@ main (void)
               // I/O redirection
               if (cmd->iored_input) 
                 {
-                  close(STDIN_FILENO);
-                  Open(cmd->iored_input);
+                  close (STDIN_FILENO);
+                  Open (cmd->iored_input);
                 }
               if (cmd->iored_output) 
                 {
-                  close(STDOUT_FILENO);
+                  close (STDOUT_FILENO);
+                  /* Overwrite if not appending. */
+                  if (!cmd->append_to_output)
+                    remove (cmd->iored_output);
                   create (cmd->iored_output, 0);
-                  int fd = Open(cmd->iored_output);
+                  int fd = Open (cmd->iored_output);
                   if (cmd->append_to_output)
                     seek (fd, filesize (fd));
                 }

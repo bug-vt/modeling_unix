@@ -31,6 +31,14 @@ perror (const char *s)
         printf ("Too many open files");
         break;
 
+      case ENAME:
+        printf ("Invalid file name length");
+        break;
+
+      case ENOENT:
+        printf ("No such file or directory");
+        break;
+
       default:
         printf ("Unknown errno");
         break;

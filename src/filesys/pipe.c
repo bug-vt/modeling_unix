@@ -106,7 +106,8 @@ enqueue_done:
 bool
 pipe_open (struct file **read_end, struct file **write_end)
 {
-  struct pipe *pipe = pipe_create (512);
+  /* Create pipe that can hold one page of data. */
+  struct pipe *pipe = pipe_create (4095);
   if (pipe == NULL)
     return false;
 

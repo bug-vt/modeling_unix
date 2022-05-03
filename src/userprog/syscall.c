@@ -22,6 +22,7 @@
 #include "filesys/pipe.h"
 #include "vm/mem.h"
 #include <user/errno.h>
+#include "devices/timer.h"
 
 #define WORD_SIZE 4
 #define SYSCALL1 WORD_SIZE 
@@ -53,6 +54,8 @@ static int sys_dup2 (int old_fd, int new_fd);
 static int sys_pipe (int *pipefd);
 static void sys_exec2 (const char *cmd_line);
 static uintptr_t sys_sbrk (intptr_t increment);
+static int64_t sys_times (void);
+static void sys_sleep (int64_t ticks);
 
 static struct file *get_file_from_fd (int fd);
 static int set_next_fd (struct file *file);
@@ -116,7 +119,10 @@ syscall_handler (struct intr_frame *f)
         {
           copy_from_user (&args, stack_arg_addr, SYSCALL2);
           str_copy_from_user (file_name, (char *) args[0]);
-          f->eax = sys_create (file_name, args[1]);
+          if (sys_create (file_name, args[1]))
+            f->eax = true;
+          else
+            f->eax = -cur->errno;
           break;
         }
       case SYS_REMOVE:
@@ -233,6 +239,17 @@ syscall_handler (struct intr_frame *f)
         {
           copy_from_user (&args, stack_arg_addr, SYSCALL1);
           f->eax = sys_sbrk (args[0]);
+          break;
+        }
+      case SYS_TIMES:
+        {
+          f->eax = sys_times ();
+          break;
+        }
+      case SYS_SLEEP:
+        {
+          copy_from_user (&args, stack_arg_addr, SYSCALL1);
+          sys_sleep (args[0]);
           break;
         }
     }
@@ -380,7 +397,7 @@ sys_open(const char* filename)
 {
   struct file *file = filesys_open (filename);
   if (file == NULL)
-    return -EINVF;
+    return -ENOENT;
 
   int fd = set_next_fd (file);
   if (fd == -EMFILE)
@@ -626,4 +643,19 @@ static uintptr_t
 sys_sbrk (intptr_t increment)
 {
   return mem_sbrk (increment);
+}
+
+/* Returns the number of clock ticks that have elapsed since
+   the system was booted. */
+static int64_t
+sys_times (void)
+{
+  return timer_ticks ();
+}
+
+/* Sleeps for approximately TICKS clock ticks. */
+static void
+sys_sleep (int64_t ticks)
+{
+  timer_sleep (ticks);
 }

@@ -11,8 +11,9 @@
 #
 
 # CHANGE this line to install a P3/P4 kernel
-BUILDDIR=./userprog/build
+BUILDDIR=./filesys/build
 EXAMPLEDIR=./examples
+DEMODIR=./tests/unix
 DISKIMAGE=usbdisk.img
 
 # check that BUILDDIR exists
@@ -43,6 +44,10 @@ pintos -v -k --qemu \
         -p ${EXAMPLEDIR}/shell -a shell \
         -p ${EXAMPLEDIR}/ls -a ls \
         -p ${EXAMPLEDIR}/halt -a halt \
+        -p ${EXAMPLEDIR}/mkdir -a mkdir \
+        -p ${EXAMPLEDIR}/xor_cipher -a xor_cipher \
+        -p ${DEMODIR}/jobserver -a jobserver \
+        -p ${DEMODIR}/mobydick.txt -a mobydick.txt \
         -p ${EXAMPLEDIR}/echo -a echo \
         -p ${EXAMPLEDIR}/cat -a cat \
         -p ${EXAMPLEDIR}/insult -a insult \
