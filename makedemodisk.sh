@@ -45,12 +45,16 @@ pintos -v -k --qemu \
         -p ${EXAMPLEDIR}/ls -a ls \
         -p ${EXAMPLEDIR}/halt -a halt \
         -p ${EXAMPLEDIR}/mkdir -a mkdir \
+        -p ${EXAMPLEDIR}/pwd -a pwd \
+        -p ${EXAMPLEDIR}/rm -a rm \
+        -p ${EXAMPLEDIR}/cp -a cp \
         -p ${EXAMPLEDIR}/xor_cipher -a xor_cipher \
         -p ${DEMODIR}/jobserver -a jobserver \
         -p ${DEMODIR}/mobydick.txt -a mobydick.txt \
         -p ${EXAMPLEDIR}/cat -a cat \
         -p ${EXAMPLEDIR}/insult -a insult \
         -p ${EXAMPLEDIR}/wc -a wc \
+        -p ${EXAMPLEDIR}/grep -a grep \
         -p ${EXAMPLEDIR}/echo -a echo \
         -p ${EXAMPLEDIR}/shell.c -a shell.c \
         -- -q -f
