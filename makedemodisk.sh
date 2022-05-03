@@ -48,7 +48,6 @@ pintos -v -k --qemu \
         -p ${EXAMPLEDIR}/xor_cipher -a xor_cipher \
         -p ${DEMODIR}/jobserver -a jobserver \
         -p ${DEMODIR}/mobydick.txt -a mobydick.txt \
-        -p ${EXAMPLEDIR}/echo -a echo \
         -p ${EXAMPLEDIR}/cat -a cat \
         -p ${EXAMPLEDIR}/insult -a insult \
         -p ${EXAMPLEDIR}/wc -a wc \

@@ -71,9 +71,6 @@ mem_install_page (void *upage, void *kpage)
 {
   struct thread *t = thread_current ();
 
-  if (pagedir_get_page (t->pagedir, upage) != NULL)
-    printf ("-------***********%p\n", upage);
-
   /* Verify that there's not already a page at that virtual
      address, then map our page there. */
   return (pagedir_get_page (t->pagedir, upage) == NULL
