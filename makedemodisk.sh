@@ -51,6 +51,8 @@ pintos -v -k --qemu \
         -p ${EXAMPLEDIR}/echo -a echo \
         -p ${EXAMPLEDIR}/cat -a cat \
         -p ${EXAMPLEDIR}/insult -a insult \
+        -p ${EXAMPLEDIR}/wc -a wc \
+        -p ${EXAMPLEDIR}/echo -a echo \
         -p ${EXAMPLEDIR}/shell.c -a shell.c \
         -- -q -f
 

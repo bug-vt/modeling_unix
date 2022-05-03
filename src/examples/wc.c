@@ -11,7 +11,7 @@ static int flag = 0x7;      /* There will be four flags, 0x1, 0x2, 0x3, and 0x4.
                                0x2: Only characters,
                                0x4: Only lines. */
 static int file_descriptor = 0;
-static int file_name_index = 0;
+static char *file_name = NULL;
 static long byte_count = 0;
 static long char_count = 0;
 static long line_count = 0;
@@ -22,10 +22,11 @@ parse_input (void)
   uint8_t *buf = malloc (sizeof (uint8_t));
   size_t size;
   while ((size = read (file_descriptor, buf, 1))) {
-    byte_count ++;
-    if (!(*buf & 0x80))
+    if (flag & 0x1)
+      byte_count ++;
+    if (!(*buf & 0x80) && flag & 0x2)
       char_count ++;
-    if (*((char*)buf) == '\n')
+    if (*((char*)buf) == '\n' && flag & 0x4)
       line_count ++;
   }
   free (buf);
@@ -49,7 +50,7 @@ main (int argc, char *argv[])
       else
         {
           file_descriptor = open (argv[index]);
-          file_name_index = index;
+          file_name = argv[index];
           if (file_descriptor == -1)
             {
               printf ("Error in opening file %s\n", argv[index]);
@@ -66,7 +67,7 @@ main (int argc, char *argv[])
     printf ("\t%ld", char_count);
   if (flag == 0x4)
     printf ("\t%ld", line_count);
-  if (!file_descriptor)
-    printf ("\t%s", argv[file_name_index]);
+  if (file_name)
+    printf ("\t%s", file_name);
   printf("\n");
 }
